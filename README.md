@@ -1,0 +1,80 @@
+# Pacto demo deployer
+
+Standalone launcher for N isolated Pacto desktop clients against a [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) branch or PR. It never touches the main `io.pacto` account.
+
+Anyone can clone this repo, copy `.env.example` to `.env`, and run `--pr` / `--branch` flags. Those flags always refer to **pacto-app**, which this tool clones into `.cache/pacto-app` on first `up`. Isolation is applied at launch (`tauri dev --config` + env vars); no `demo:` commits are required on pacto-app.
+
+## Prerequisites
+
+- `git`
+- `gh` (authenticated) — required for `--pr`
+- `node` and `pnpm`
+- Rust / Tauri toolchain (same as pacto-app)
+
+## Usage
+
+```bash
+git clone <this-repo>
+cd pacto-demo-deployer
+cp .env.example .env    # then put a different phrase on each PACTO_DEMO_SEED_N
+
+node pacto-demo.mjs up --pr 123 --clients 3
+node pacto-demo.mjs up --branch feat/gov-ux-improvements --clients 2
+
+node pacto-demo.mjs status
+node pacto-demo.mjs down
+
+node pacto-demo.mjs wipe --client 1
+node pacto-demo.mjs wipe --all
+```
+
+Makefile equivalents:
+
+```bash
+make up PR=123 CLIENTS=3
+make up BRANCH=feat/gov-ux-improvements CLIENTS=2
+make status
+make down
+make wipe CLIENT=1
+make wipe-all
+```
+
+First `up` clones [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) into `.cache/pacto-app`. Override the remote with `PACTO_APP_REMOTE` in `.env`.
+
+Seed phrases live in `.env` (gitignored). Copy `.env.example` and set one phrase per client:
+
+```
+PACTO_DEMO_SEED_1="twelve words for the first account ..."
+PACTO_DEMO_SEED_2="twelve words for the second account ..."
+PACTO_DEMO_SEED_3="twelve words for the third account ..."
+```
+
+`PACTO_DEMO_SEED_N` logs into client N. Clients with no matching seed start on the welcome screen. Optional `PACTO_DEMO_PIN` (default `123456`). `--seed` on the CLI overrides the numbered `.env` slot for that client.
+
+## Isolation
+
+| Client | Identifier | App data (macOS) | Ports (dev / hmr / mcp) |
+| --- | --- | --- | --- |
+| 1 | `io.pacto.demo.1` | `~/Library/Application Support/io.pacto.demo.1` | 1430 / 1431 / 9323 |
+| 2 | `io.pacto.demo.2` | `~/Library/Application Support/io.pacto.demo.2` | 1440 / 1441 / 9423 |
+| n | `io.pacto.demo.n` | `~/Library/Application Support/io.pacto.demo.n` | `1420+10n` / `1421+10n` / `9223+100n` |
+
+Index 0 (`io.pacto`, ports 1420 / 1421 / 9223) is reserved for your main client and is never used or deleted.
+
+Storage survives `up` / `down`. Wipe is the only way to reset a client:
+
+```bash
+make wipe CLIENT=1
+# rm -rf "$HOME/Library/Application Support/io.pacto.demo.1"
+```
+
+Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account.
+
+## Layout
+
+- `.env` / `.env.example` — numbered seed phrases and optional `PACTO_APP_REMOTE`
+- `.cache/pacto-app/` — clone of pacto-app (gitignored)
+- `worktrees/<slug>/` — detached checkout of the chosen PR or branch
+- `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`)
+- `logs/client-<n>.log` — `tauri dev` output
+- `pids.json` — running client PIDs for `down` / `status`

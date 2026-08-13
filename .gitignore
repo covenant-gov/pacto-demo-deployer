@@ -1,0 +1,8 @@
+.cache/
+worktrees/
+targets/
+logs/
+pids.json
+.env
+seeds.txt
+.DS_Store
