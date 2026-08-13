@@ -1034,7 +1034,7 @@ async function createHeadlessAccount(bridge, pin) {
     // keypackage publish is best-effort; squad loop retries
   }
   await reloadWebview(bridge);
-  const npub = await waitForAccount(bridge, SESSION_WAIT_MS);
+  const npub = await waitForAccount(bridge, 10_000);
   if (!npub) throw new Error('create_account succeeded but no current account after reload');
   return npub;
 }
@@ -1050,13 +1050,18 @@ async function unlockWithPin(bridge, pin) {
   return waitForAccount(bridge, 10_000);
 }
 
-async function ensureSession(bridge, pin) {
+async function ensureSession(bridge, pin, seeded) {
   await waitForTauri(bridge);
-  let npub = await waitForAccount(bridge, SESSION_WAIT_MS);
-  if (npub) return npub;
-  try {
-    npub = await unlockWithPin(bridge, pin);
+  if (seeded) {
+    const npub = await waitForAccount(bridge, SESSION_WAIT_MS);
     if (npub) return npub;
+  } else {
+    const npub = await tryCurrentAccount(bridge);
+    if (npub) return npub;
+  }
+  try {
+    const unlocked = await unlockWithPin(bridge, pin);
+    if (unlocked) return unlocked;
   } catch {
     // no stored key, or wrong PIN — create instead
   }
@@ -1124,7 +1129,7 @@ async function setupDemoName(client, pin) {
   const name = demoNameForIndex(client.index);
   log(`  client ${client.index}: session + profile ${name}`);
   const npub = await withMcp(client.ports.mcpBridge, async bridge => {
-    const account = await ensureSession(bridge, pin);
+    const account = await ensureSession(bridge, pin, client.seeded);
     await invokeTauri(bridge, 'update_profile', {
       name,
       avatar: '',
