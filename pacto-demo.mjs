@@ -215,24 +215,41 @@ function assertWipePath(dir) {
   return resolved;
 }
 
-function isPortFree(port) {
+const LOOPBACK_HOSTS = ['127.0.0.1', '::1'];
+
+function bindOnce(port, host) {
   return new Promise(resolve => {
     const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.listen(port, '127.0.0.1', () => {
-      server.close(() => resolve(true));
+    server.once('error', err => {
+      if (err.code === 'EADDRINUSE' || err.code === 'EACCES') resolve('busy');
+      else resolve('unavailable');
+    });
+    server.listen(port, host, () => {
+      server.close(() => resolve('free'));
     });
   });
 }
 
-function isPortListening(port) {
+async function isPortFree(port) {
+  const results = await Promise.all(LOOPBACK_HOSTS.map(host => bindOnce(port, host)));
+  if (results.includes('busy')) return false;
+  return results.some(r => r === 'free');
+}
+
+function connectOnce(port, host) {
   return new Promise(resolve => {
-    const socket = net.connect({ port, host: '127.0.0.1' }, () => {
+    const socket = net.connect({ port, host });
+    socket.once('connect', () => {
       socket.end();
       resolve(true);
     });
     socket.once('error', () => resolve(false));
   });
+}
+
+async function isPortListening(port) {
+  const results = await Promise.all(LOOPBACK_HOSTS.map(host => connectOnce(port, host)));
+  return results.some(Boolean);
 }
 
 async function allPortsFree(ports) {
