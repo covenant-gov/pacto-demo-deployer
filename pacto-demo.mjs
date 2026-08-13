@@ -52,9 +52,11 @@ PRs and branches are from https://github.com/covenant-gov/pacto-app
 (cloned into .cache/pacto-app on first up).
 
 Usage:
-  cp .env.example .env          # then set PACTO_DEMO_SEED_1, _2, ...
+  cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_1, ...
+  node pacto-demo.mjs up
   node pacto-demo.mjs up --pr <n> --clients <n>
   node pacto-demo.mjs up --branch <name> --clients <n>
+  node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
   node pacto-demo.mjs down
   node pacto-demo.mjs down --wipe
   node pacto-demo.mjs status
@@ -65,15 +67,19 @@ Options:
   --pr <n>              GitHub PR number on covenant-gov/pacto-app (mutually exclusive with --branch)
   --branch <name>       Remote branch on covenant-gov/pacto-app (mutually exclusive with --pr)
   --clients <n>         Number of desktop clients to launch (1..${MAX_CLIENTS})
-  --env <path>          Env file with PACTO_DEMO_SEED_N (default: .env next to this script)
+  --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N (default: .env next to this script)
   --seed "<phrase>"     Repeatable; overrides PACTO_DEMO_SEED_1, then _2, ...
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
   --all                 Wipe every io.pacto.demo.<n> directory
 
+Defaults (CLI overrides .env):
+  PR / BRANCH / CLIENTS in .env
+
 Makefile:
-  make up PR=123 CLIENTS=3
+  make up
+  make reload
   make down
   make down-wipe
   make wipe CLIENT=1
@@ -402,7 +408,16 @@ function loadSeedConfig(args) {
     envVars.PACTO_APP_REMOTE?.trim() ||
     process.env.PACTO_APP_REMOTE?.trim() ||
     DEFAULT_APP_REMOTE;
-  return { byIndex, pin, envPath, loaded: fs.existsSync(envPath), appRemote };
+  return {
+    byIndex,
+    pin,
+    envPath,
+    loaded: fs.existsSync(envPath),
+    appRemote,
+    pr: envVars.PR?.trim() || null,
+    branch: envVars.BRANCH?.trim() || null,
+    clients: envVars.CLIENTS?.trim() || null,
+  };
 }
 
 function readPidsFile() {
@@ -609,10 +624,10 @@ function ensureAppClone(remote) {
 
 function resolveRef(args, appRepo, remote) {
   if (args.pr && args.branch) {
-    throw new Error('--pr and --branch are mutually exclusive');
+    throw new Error('--pr and --branch are mutually exclusive (also PR= and BRANCH= in .env)');
   }
   if (!args.pr && !args.branch) {
-    throw new Error('up requires --pr <n> or --branch <name>');
+    throw new Error('up requires --pr <n> or --branch <name> (or PR= / BRANCH= in .env)');
   }
 
   const repo = githubRepoSlug(remote);
@@ -802,23 +817,33 @@ function tailLog(logPath, lines = 40) {
 }
 
 async function cmdUp(args) {
-  const clients = parsePositiveInt(args.clients, '--clients');
-  if (clients > MAX_CLIENTS) {
-    throw new Error(`--clients must be <= ${MAX_CLIENTS}, got ${clients}`);
-  }
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
+  const launchArgs = {
+    ...args,
+    pr: args.pr || seedConfig.pr,
+    branch: args.branch || seedConfig.branch,
+    clients: args.clients ?? seedConfig.clients,
+  };
   if (seedConfig.loaded) {
     log(`seeds: ${seedConfig.envPath} (${seedConfig.byIndex.size} phrase(s))`);
   } else {
     log(`seeds: no .env at ${seedConfig.envPath} (copy .env.example to .env); extra clients stay fresh`);
   }
 
-  if (args.pr && args.branch) {
-    throw new Error('--pr and --branch are mutually exclusive');
+  if (launchArgs.clients == null || launchArgs.clients === '') {
+    throw new Error('up requires --clients <n> or CLIENTS in .env');
   }
-  if (!args.pr && !args.branch) {
-    throw new Error('up requires --pr <n> or --branch <name>');
+  const clients = parsePositiveInt(launchArgs.clients, '--clients');
+  if (clients > MAX_CLIENTS) {
+    throw new Error(`--clients must be <= ${MAX_CLIENTS}, got ${clients}`);
+  }
+
+  if (launchArgs.pr && launchArgs.branch) {
+    throw new Error('--pr and --branch are mutually exclusive (also PR= and BRANCH= in .env)');
+  }
+  if (!launchArgs.pr && !launchArgs.branch) {
+    throw new Error('up requires --pr <n> or --branch <name> (or PR= / BRANCH= in .env)');
   }
 
   for (let i = 1; i <= clients; i++) {
@@ -828,6 +853,8 @@ async function cmdUp(args) {
   }
 
   const existing = readPidsFile();
+  const previousSha = existing?.ref?.sha || null;
+  const previousLabel = existing?.ref?.label || null;
   if (existing?.clients?.some(c => isAlive(c.pid))) {
     log('stopping previous deployer session (storage kept)');
     await cmdDown({ quiet: true });
@@ -836,8 +863,17 @@ async function cmdUp(args) {
   }
 
   const appRepo = ensureAppClone(seedConfig.appRemote);
-  const ref = resolveRef(args, appRepo, seedConfig.appRemote);
-  log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)}`);
+  const ref = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
+  if (previousSha && previousSha === ref.sha) {
+    log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)} (unchanged)`);
+  } else if (previousSha) {
+    log(
+      `checkout ${ref.repo} ${ref.label} @ ${previousSha.slice(0, 12)} → ${ref.sha.slice(0, 12)}` +
+        (previousLabel && previousLabel !== ref.label ? ` (was ${previousLabel})` : ''),
+    );
+  } else {
+    log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)}`);
+  }
   const worktreePath = ensureWorktree(ref, appRepo);
   pnpmInstall(worktreePath);
 
@@ -897,6 +933,7 @@ async function cmdUp(args) {
   log('');
   log(`launched ${clients} client(s). Storage persists until wipe.`);
   log('  node pacto-demo.mjs status');
+  log('  node pacto-demo.mjs reload');
   log('  node pacto-demo.mjs down');
   log('  node pacto-demo.mjs down --wipe');
 }
@@ -918,6 +955,7 @@ async function main() {
         log(USAGE);
         break;
       case 'up':
+      case 'reload':
         await cmdUp(args);
         break;
       case 'down':

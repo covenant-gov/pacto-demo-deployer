@@ -1,32 +1,37 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-CLIENTS ?= 1
-
-.PHONY: help up down down-wipe status wipe wipe-all
+.PHONY: help up reload down down-wipe status wipe wipe-all
 
 help:
 	@$(NODE) $(SCRIPT) help
 
-# Seeds come from .env (copy .env.example). Optional ENV=/path/to/.env
+# PR / BRANCH / CLIENTS / PIN come from .env. Override on the command line:
 # make up PR=123 CLIENTS=3
 # make up BRANCH=feat/gov-ux-improvements CLIENTS=2
-UP_FLAGS := up --clients $(CLIENTS)
-ifneq ($(PR),)
-  UP_FLAGS += --pr $(PR)
+# make reload
+LAUNCH_FLAGS :=
+ifdef PR
+  LAUNCH_FLAGS += --pr $(PR)
 endif
-ifneq ($(BRANCH),)
-  UP_FLAGS += --branch $(BRANCH)
+ifdef BRANCH
+  LAUNCH_FLAGS += --branch $(BRANCH)
 endif
-ifneq ($(ENV),)
-  UP_FLAGS += --env $(ENV)
+ifdef CLIENTS
+  LAUNCH_FLAGS += --clients $(CLIENTS)
 endif
-ifneq ($(PIN),)
-  UP_FLAGS += --pin $(PIN)
+ifdef ENV
+  LAUNCH_FLAGS += --env $(ENV)
+endif
+ifdef PIN
+  LAUNCH_FLAGS += --pin $(PIN)
 endif
 
 up:
-	$(NODE) $(SCRIPT) $(UP_FLAGS)
+	$(NODE) $(SCRIPT) up $(LAUNCH_FLAGS)
+
+reload:
+	$(NODE) $(SCRIPT) reload $(LAUNCH_FLAGS)
 
 down:
 	$(NODE) $(SCRIPT) down
