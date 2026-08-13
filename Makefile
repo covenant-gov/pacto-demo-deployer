@@ -3,7 +3,7 @@ SCRIPT := pacto-demo.mjs
 
 CLIENTS ?= 1
 
-.PHONY: help up down status wipe wipe-all
+.PHONY: help up down down-wipe status wipe wipe-all
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -30,6 +30,9 @@ up:
 
 down:
 	$(NODE) $(SCRIPT) down
+
+down-wipe:
+	$(NODE) $(SCRIPT) down --wipe
 
 status:
 	$(NODE) $(SCRIPT) status

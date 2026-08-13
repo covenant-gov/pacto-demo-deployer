@@ -56,6 +56,7 @@ Usage:
   node pacto-demo.mjs up --pr <n> --clients <n>
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs down
+  node pacto-demo.mjs down --wipe
   node pacto-demo.mjs status
   node pacto-demo.mjs wipe --client <n>
   node pacto-demo.mjs wipe --all
@@ -67,14 +68,16 @@ Options:
   --env <path>          Env file with PACTO_DEMO_SEED_N (default: .env next to this script)
   --seed "<phrase>"     Repeatable; overrides PACTO_DEMO_SEED_1, then _2, ...
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
+  --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
   --all                 Wipe every io.pacto.demo.<n> directory
 
 Makefile:
   make up PR=123 CLIENTS=3
+  make down
+  make down-wipe
   make wipe CLIENT=1
   make wipe-all
-  make down
 `;
 
 function fail(message) {
@@ -272,6 +275,7 @@ function parseArgs(argv) {
     pin: null,
     client: null,
     all: false,
+    wipe: false,
   };
   const rest = argv.slice(2);
   if (rest.length === 0) return out;
@@ -324,6 +328,9 @@ function parseArgs(argv) {
         break;
       case '--all':
         out.all = true;
+        break;
+      case '--wipe':
+        out.wipe = true;
         break;
       case '-h':
       case '--help':
@@ -472,15 +479,16 @@ async function stopClients(state, { quiet = false } = {}) {
   }
 }
 
-async function cmdDown({ quiet = false } = {}) {
+async function cmdDown({ quiet = false, wipe = false } = {}) {
   const state = readPidsFile();
   if (!state) {
     if (!quiet) log('no pids.json — nothing to stop');
-    return;
+  } else {
+    await stopClients(state, { quiet });
+    if (fs.existsSync(PIDS_FILE)) fs.unlinkSync(PIDS_FILE);
+    if (!quiet) log(wipe ? 'stopped.' : 'stopped. storage was not wiped.');
   }
-  await stopClients(state, { quiet });
-  if (fs.existsSync(PIDS_FILE)) fs.unlinkSync(PIDS_FILE);
-  if (!quiet) log('stopped. storage was not wiped.');
+  if (wipe) cmdWipe({ all: true });
 }
 
 function cmdStatus() {
@@ -890,7 +898,7 @@ async function cmdUp(args) {
   log(`launched ${clients} client(s). Storage persists until wipe.`);
   log('  node pacto-demo.mjs status');
   log('  node pacto-demo.mjs down');
-  log('  node pacto-demo.mjs wipe --client 1');
+  log('  node pacto-demo.mjs down --wipe');
 }
 
 async function main() {
@@ -913,7 +921,7 @@ async function main() {
         await cmdUp(args);
         break;
       case 'down':
-        await cmdDown();
+        await cmdDown({ wipe: args.wipe });
         break;
       case 'status':
         cmdStatus();

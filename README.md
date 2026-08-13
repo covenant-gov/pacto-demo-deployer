@@ -23,6 +23,7 @@ node pacto-demo.mjs up --branch feat/gov-ux-improvements --clients 2
 
 node pacto-demo.mjs status
 node pacto-demo.mjs down
+node pacto-demo.mjs down --wipe
 
 node pacto-demo.mjs wipe --client 1
 node pacto-demo.mjs wipe --all
@@ -35,6 +36,7 @@ make up PR=123 CLIENTS=3
 make up BRANCH=feat/gov-ux-improvements CLIENTS=2
 make status
 make down
+make down-wipe
 make wipe CLIENT=1
 make wipe-all
 ```
@@ -61,7 +63,7 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 
 Index 0 (`io.pacto`, ports 1420 / 1421 / 9223) is reserved for your main client and is never used or deleted.
 
-Storage survives `up` / `down`. Wipe is the only way to reset a client:
+Storage survives `up` / `down`. `down --wipe` (or `make down-wipe`) stops clients and deletes every `io.pacto.demo.<n>` directory. Per-client reset:
 
 ```bash
 make wipe CLIENT=1
