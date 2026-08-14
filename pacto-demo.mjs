@@ -56,6 +56,7 @@ const MCP_WINDOW = 'main';
 const MCP_JS_TIMEOUT_MS = 7_000;
 const MCP_INVOKE_TIMEOUT_MS = 45_000;
 const SESSION_WAIT_MS = 30_000;
+const PIN_UNLOCK_WAIT_MS = 15_000;
 const SQUAD_RETRY_MS = 30_000;
 const CANCEL_BROADCAST_MS = 15_000;
 const MESSAGE_ID_WAIT_MS = 15_000;
@@ -985,7 +986,100 @@ async function invokeTauri(bridge, command, args = {}, timeoutMs = MCP_INVOKE_TI
   throw new Error(`invoke ${command} timed out after ${timeoutMs}ms`);
 }
 
-async function reloadWebview(bridge) {
+async function pinUnlockUiState(bridge) {
+  try {
+    return await executeJs(
+      bridge,
+      `(() => {
+        const title = document.querySelector('.pin-title')?.textContent?.trim() || '';
+        const login = !!document.querySelector('.login-container');
+        return { title, login };
+      })()`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function pasteUnlockPin(bridge, pin) {
+  const script = `(() => {
+    const title = document.querySelector('.pin-title')?.textContent?.trim() || '';
+    if (title !== 'Enter your PIN') return { ok: false, reason: 'not-unlock', title };
+    const inputs = Array.from(document.querySelectorAll('input.pin-digit'));
+    if (!inputs.length) return { ok: false, reason: 'no-input' };
+    const pin = ${JSON.stringify(pin)};
+    const first = inputs[0];
+    first.focus();
+    let filled = false;
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text', pin);
+      dt.setData('text/plain', pin);
+      first.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dt,
+      }));
+      filled = inputs.every((el, i) => el.value === pin[i]);
+    } catch {
+      filled = false;
+    }
+    if (!filled) {
+      pin.split('').forEach((digit, i) => {
+        const el = inputs[i];
+        if (!el) return;
+        el.focus();
+        el.value = digit;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    return { ok: true };
+  })()`;
+  await executeJs(bridge, script);
+}
+
+async function unlockPinUiIfNeeded(bridge, pin) {
+  if (!pin) return;
+  const appearDeadline = Date.now() + 5_000;
+  let sawUnlock = false;
+  while (Date.now() < appearDeadline) {
+    const state = await pinUnlockUiState(bridge);
+    if (!state) {
+      await sleep(250);
+      continue;
+    }
+    if (!state.login) return;
+    if (state.title === 'Enter your PIN') {
+      sawUnlock = true;
+      break;
+    }
+    if (state.title) return;
+    await sleep(250);
+  }
+  if (!sawUnlock) return;
+
+  let lastPaste = 0;
+  const goneDeadline = Date.now() + PIN_UNLOCK_WAIT_MS;
+  while (Date.now() < goneDeadline) {
+    const state = await pinUnlockUiState(bridge);
+    if (!state) {
+      await sleep(400);
+      continue;
+    }
+    if (!state.login || state.title !== 'Enter your PIN') return;
+    if (Date.now() - lastPaste > 1_500) {
+      try {
+        await pasteUnlockPin(bridge, pin);
+        lastPaste = Date.now();
+      } catch {
+        // retry while the unlock form is still up
+      }
+    }
+    await sleep(400);
+  }
+}
+
+async function reloadWebview(bridge, pin) {
   try {
     await executeJs(bridge, '(() => { window.location.reload(); return true; })()');
   } catch {
@@ -993,6 +1087,7 @@ async function reloadWebview(bridge) {
   }
   await sleep(1_500);
   await waitForTauri(bridge);
+  await unlockPinUiIfNeeded(bridge, pin);
 }
 
 async function tryCurrentAccount(bridge) {
@@ -1033,7 +1128,7 @@ async function createHeadlessAccount(bridge, pin) {
   } catch {
     // keypackage publish is best-effort; squad loop retries
   }
-  await reloadWebview(bridge);
+  await reloadWebview(bridge, pin);
   const npub = await waitForAccount(bridge, 10_000);
   if (!npub) throw new Error('create_account succeeded but no current account after reload');
   return npub;
@@ -1052,21 +1147,25 @@ async function unlockWithPin(bridge, pin) {
 
 async function ensureSession(bridge, pin, seeded) {
   await waitForTauri(bridge);
+  let npub = null;
   if (seeded) {
-    const npub = await waitForAccount(bridge, SESSION_WAIT_MS);
-    if (npub) return npub;
+    npub = await waitForAccount(bridge, SESSION_WAIT_MS);
   } else {
-    const npub = await tryCurrentAccount(bridge);
-    if (npub) return npub;
+    npub = await tryCurrentAccount(bridge);
   }
-  try {
-    const unlocked = await unlockWithPin(bridge, pin);
-    if (unlocked) return unlocked;
-  } catch {
-    // no stored key, or wrong PIN — create instead
+  if (!npub) {
+    try {
+      npub = await unlockWithPin(bridge, pin);
+    } catch {
+      // no stored key, or wrong PIN — create instead
+    }
   }
-  log('    no session; creating a fresh account');
-  return createHeadlessAccount(bridge, pin);
+  if (!npub) {
+    log('    no session; creating a fresh account');
+    npub = await createHeadlessAccount(bridge, pin);
+  }
+  await unlockPinUiIfNeeded(bridge, pin);
+  return npub;
 }
 
 async function lastOutboundMessageId(bridge, peerNpub, content) {
@@ -1125,18 +1224,41 @@ async function publishDemoBroadcast(bridge, npub, name) {
   });
 }
 
+async function currentProfileName(bridge, npub) {
+  try {
+    const profile = await invokeTauri(bridge, 'get_profile', { npub });
+    return typeof profile?.name === 'string' ? profile.name : '';
+  } catch {
+    return '';
+  }
+}
+
 async function setupDemoName(client, pin) {
   const name = demoNameForIndex(client.index);
   log(`  client ${client.index}: session + profile ${name}`);
   const npub = await withMcp(client.ports.mcpBridge, async bridge => {
     const account = await ensureSession(bridge, pin, client.seeded);
-    await invokeTauri(bridge, 'update_profile', {
-      name,
-      avatar: '',
-      banner: '',
-      about: '',
-    });
-    await reloadWebview(bridge);
+    const existing = await currentProfileName(bridge, account);
+    if (existing === name) {
+      log(`    name already ${name}; skipping profile update`);
+      return account;
+    }
+    try {
+      await invokeTauri(bridge, 'connect');
+    } catch {
+      // UI unlock / autologin may still be opening relays
+    }
+    try {
+      await invokeTauri(bridge, 'update_profile', {
+        name,
+        avatar: '',
+        banner: '',
+        about: '',
+      });
+    } catch (err) {
+      log(`    profile update skipped: ${err.message}`);
+    }
+    await reloadWebview(bridge, pin);
     return account;
   });
   client.name = name;
@@ -1144,7 +1266,7 @@ async function setupDemoName(client, pin) {
   log(`    ${name} ${npub}`);
 }
 
-async function runDemoOrchestration(clients) {
+async function runDemoOrchestration(clients, pin) {
   const named = clients.filter(c => c.npub);
   if (named.length === 0) {
     log('orchestration: no named clients, skipping');
@@ -1156,7 +1278,7 @@ async function runDemoOrchestration(clients) {
     try {
       await withMcp(client.ports.mcpBridge, async bridge => {
         await publishDemoBroadcast(bridge, client.npub, client.name);
-        await reloadWebview(bridge);
+        await reloadWebview(bridge, pin);
       });
       client.broadcast = true;
       log(`  client ${client.index}: broadcast ${client.name}`);
@@ -1375,7 +1497,7 @@ async function cmdUp(args) {
     writePidsFile(state);
   }
 
-  await runDemoOrchestration(state.clients);
+  await runDemoOrchestration(state.clients, (pin && String(pin).trim()) || DEFAULT_DEMO_PIN);
   writePidsFile(state);
   log('');
   log(`launched ${clients} client(s). Storage persists until wipe.`);
