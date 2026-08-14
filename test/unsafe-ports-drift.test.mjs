@@ -20,6 +20,20 @@ import {
 const CACHED_DEV_PORTS = path.join(DEPLOYER_DIR, '.cache', 'pacto-app', 'scripts', 'dev-ports.mjs');
 const available = fs.existsSync(CACHED_DEV_PORTS);
 
+// pacto-app's UNSAFE_BROWSER_PORTS is a module-private const, not exported --
+// pull the literal out of the source text instead of only probing it
+// indirectly through derived indices (probing misses any entry that isn't a
+// port some index 1..31 actually derives, e.g. a typo'd or stray value).
+function parseUnsafePortsLiteral(source) {
+  const match = source.match(/const UNSAFE_BROWSER_PORTS = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(match, 'could not find UNSAFE_BROWSER_PORTS literal in pacto-app source');
+  return new Set((match[1].match(/\d+/g) || []).map(Number));
+}
+
+function setDiff(a, b) {
+  return [...a].filter(x => !b.has(x));
+}
+
 test(
   'UNSAFE_BROWSER_PORTS agrees with the cached pacto-app clone',
   {
@@ -28,8 +42,19 @@ test(
       : `no .cache/pacto-app clone at ${CACHED_DEV_PORTS} yet (run 'up' once to populate it)`,
   },
   async () => {
-    const { browserSafeIndex } = await import(pathToFileURL(CACHED_DEV_PORTS).href);
+    const theirs = parseUnsafePortsLiteral(fs.readFileSync(CACHED_DEV_PORTS, 'utf8'));
 
+    const onlyOurs = setDiff(UNSAFE_BROWSER_PORTS, theirs);
+    const onlyTheirs = setDiff(theirs, UNSAFE_BROWSER_PORTS);
+    assert.deepStrictEqual(
+      { onlyOurs, onlyTheirs },
+      { onlyOurs: [], onlyTheirs: [] },
+      'UNSAFE_BROWSER_PORTS drifted from pacto-app scripts/dev-ports.mjs',
+    );
+
+    // Secondary check: the two lists also have to agree on every index this
+    // repo can actually launch (1..31, matching pacto-app's MAX_INDEX).
+    const { browserSafeIndex } = await import(pathToFileURL(CACHED_DEV_PORTS).href);
     for (let index = 1; index <= 31; index++) {
       const ports = {
         devServer: BASE_DEV_SERVER + index * PORT_STRIDE,
