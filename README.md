@@ -33,9 +33,11 @@ CLI flags override `.env` (`--pr`, `--branch`, `--clients`). Makefile equivalent
 
 ```bash
 make up
+make up-full
+make dm
+make squad
+make squad-join
 make reload
-make up PR=123 CLIENTS=3
-make up BRANCH=feat/gov-ux-improvements CLIENTS=2
 make status
 make down
 make down-wipe
@@ -81,6 +83,16 @@ make wipe CLIENT=1
 Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account.
 
 ## Layout
+
+CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
+
+- `src/lib/` — config, isolation/ports, git worktree, MCP, session, launch
+- `src/commands/` — `up` / `reload` / `up-full` and lifecycle (`down`, `status`, `wipe`)
+- `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module + registry row for a new branch test
+- `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo
+- `docs/plans/` / `docs/solutions/` — accepted plans and compounded learnings
+
+Runtime / gitignored:
 
 - `.env` / `.env.example` — `PR` / `CLIENTS` / numbered seed phrases and optional `PACTO_APP_REMOTE`
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
