@@ -18,6 +18,7 @@ import {
   storageDirForClient,
   wipeDir,
 } from '../lib/process.mjs';
+import { releaseClaimForClient } from '../lib/claims.mjs';
 import { cancelDemoBroadcast } from '../scenarios/index.mjs';
 
 async function stopClients(state, { quiet = false } = {}) {
@@ -29,11 +30,13 @@ async function stopClients(state, { quiet = false } = {}) {
   for (const client of clients) {
     if (!isAlive(client.pid)) {
       if (!quiet) log(`client ${client.index}: already stopped (pid ${client.pid})`);
+      releaseClaimForClient(client.index);
       continue;
     }
     await cancelDemoBroadcast(client, { quiet });
     if (!quiet) log(`client ${client.index}: stopping pid ${client.pid}`);
     stopPid(client.pid);
+    releaseClaimForClient(client.index);
   }
   const deadline = Date.now() + STOP_GRACE_MS;
   while (Date.now() < deadline) {
@@ -110,9 +113,13 @@ export function cmdWipe(args) {
       log('no io.pacto.demo.<n> directories to wipe');
       return;
     }
-    for (const dir of dirs) wipeDir(dir);
+    for (const dir of dirs) {
+      wipeDir(dir);
+      releaseClaimForClient(Number(path.basename(dir).slice('io.pacto.demo.'.length)));
+    }
     return;
   }
   const index = parsePositiveInt(args.client, '--client');
   wipeDir(storageDirForClient(index));
+  releaseClaimForClient(index);
 }

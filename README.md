@@ -104,7 +104,7 @@ Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `P
 
 CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 
-- `src/lib/` — config, isolation/ports, git worktree, MCP, session, launch
+- `src/lib/` — config, isolation/ports, dev-port claims, git worktree, MCP, session, launch
 - `src/commands/` — `up` / `reload` / `up-full` and lifecycle (`down`, `status`, `wipe`)
 - `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module and one row in [`src/scenarios/index.mjs`](src/scenarios/index.mjs) for a new branch test
 - Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
@@ -120,3 +120,16 @@ Runtime / gitignored:
 - `logs/client-<n>.log` — `tauri dev` output
 - `pids.json` — running client PIDs for `down` / `status` / scenarios
 - `backups/client-<n>.txt` — seed phrases after session (mode 0600; never commit)
+
+## Tests
+
+Plain `node --test`, no dependencies or build step:
+
+```bash
+node --test 'test/*.test.mjs'
+```
+
+`test/cross-repo-claims.test.mjs` skips cleanly unless a pacto-app checkout is
+present at `PACTO_APP_DEV_PORTS` (default `/Users/opselite/src/covenant-gov/pacto-app/scripts/dev-ports.mjs`).
+`test/unsafe-ports-drift.test.mjs` skips cleanly unless `.cache/pacto-app` has
+been populated by a prior `up`.
