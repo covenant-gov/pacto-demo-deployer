@@ -2,6 +2,7 @@
 worktrees/
 targets/
 logs/
+backups/
 pids.json
 .env
 seeds.txt

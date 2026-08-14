@@ -23,6 +23,7 @@ const DEFAULT_APP_REMOTE = 'https://github.com/covenant-gov/pacto-app.git';
 const WORKTREES_DIR = path.join(DEPLOYER_DIR, 'worktrees');
 const TARGETS_DIR = path.join(DEPLOYER_DIR, 'targets');
 const LOGS_DIR = path.join(DEPLOYER_DIR, 'logs');
+const BACKUPS_DIR = path.join(DEPLOYER_DIR, 'backups');
 const PIDS_FILE = path.join(DEPLOYER_DIR, 'pids.json');
 
 const IDENTIFIER_RE = /^io\.pacto\.demo\.[1-9][0-9]*$/;
@@ -46,6 +47,9 @@ const PORT_POLL_MS = 1_000;
 const DEFAULT_ENV_FILE = path.join(DEPLOYER_DIR, '.env');
 const SEED_ENV_RE = /^PACTO_DEMO_SEED_([1-9][0-9]*)$/;
 const DEFAULT_DEMO_PIN = '123456';
+const DEMO_SQUAD_NAME = 'alpha-squad-test';
+const DEMO_SQUAD_NETWORK = 'sepolia';
+const DEMO_SQUAD_TAGS = ['test', 'demo', 'alpha'];
 const NATO_WORDS = [
   'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel',
   'india', 'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa',
@@ -67,8 +71,12 @@ PRs and branches are from https://github.com/covenant-gov/pacto-app
 (cloned into .cache/pacto-app on first up).
 
 Usage:
-  cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_1, ...
-  node pacto-demo.mjs up
+  cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_N, ...
+  node pacto-demo.mjs up        # launch, login/create, backup seed, profile, broadcast
+  node pacto-demo.mjs up-full   # same as: up --full (DMs + squad after launch)
+  node pacto-demo.mjs dm        # client 1 DMs others; they reply (clients must be up)
+  node pacto-demo.mjs squad     # client 1 creates alpha-squad-test with bravo-test (Sepolia, Commons #test)
+  node pacto-demo.mjs squad --all
   node pacto-demo.mjs up --pr <n> --clients <n>
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
@@ -87,13 +95,18 @@ Options:
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
-  --all                 Wipe every io.pacto.demo.<n> directory
+  --full                After up: also run DMs and squad (client 1 invites client 2)
+  --all                 wipe: every demo storage dir; squad: invite all other live clients
 
 Defaults (CLI overrides .env):
   PR / BRANCH / CLIENTS in .env
 
 Makefile:
   make up
+  make up-full
+  make dm
+  make squad
+  make squad-all
   make reload
   make down
   make down-wipe
@@ -297,6 +310,7 @@ function parseArgs(argv) {
     client: null,
     all: false,
     wipe: false,
+    full: false,
   };
   const rest = argv.slice(2);
   if (rest.length === 0) return out;
@@ -349,6 +363,9 @@ function parseArgs(argv) {
         break;
       case '--all':
         out.all = true;
+        break;
+      case '--full':
+        out.full = true;
         break;
       case '--wipe':
         out.wipe = true;
@@ -1145,10 +1162,44 @@ async function unlockWithPin(bridge, pin) {
   return waitForAccount(bridge, 10_000);
 }
 
-async function ensureSession(bridge, pin, seeded) {
+async function persistSeedBackup(bridge, client, npub) {
+  let phrase = '';
+  try {
+    const seed = await invokeTauri(bridge, 'get_seed');
+    if (typeof seed === 'string') phrase = seed.trim();
+  } catch {
+    return false;
+  }
+  if (!phrase) return false;
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  const dest = path.join(BACKUPS_DIR, `client-${client.index}.txt`);
+  if (fs.existsSync(dest)) {
+    const existing = fs.readFileSync(dest, 'utf8');
+    if (existing.includes(phrase)) return true;
+  }
+  const body = `# ${client.identifier}  ${npub}  ${new Date().toISOString()}\n${phrase}\n`;
+  fs.writeFileSync(dest, body, { mode: 0o600 });
+  try {
+    fs.chmodSync(dest, 0o600);
+  } catch {
+    // best-effort
+  }
+  log(`    wrote recovery phrase to backups/client-${client.index}.txt`);
+  return true;
+}
+
+async function markBackupVerified(bridge) {
+  try {
+    await invokeTauri(bridge, 'set_sql_setting', { key: 'backup_verified', value: 'true' });
+  } catch {
+    // no account db yet
+  }
+}
+
+async function ensureSession(bridge, pin, client) {
   await waitForTauri(bridge);
   let npub = null;
-  if (seeded) {
+  if (client.seeded) {
     npub = await waitForAccount(bridge, SESSION_WAIT_MS);
   } else {
     npub = await tryCurrentAccount(bridge);
@@ -1164,7 +1215,10 @@ async function ensureSession(bridge, pin, seeded) {
     log('    no session; creating a fresh account');
     npub = await createHeadlessAccount(bridge, pin);
   }
+  await markBackupVerified(bridge);
+  let backed = await persistSeedBackup(bridge, client, npub);
   await unlockPinUiIfNeeded(bridge, pin);
+  if (!backed) await persistSeedBackup(bridge, client, npub);
   return npub;
 }
 
@@ -1237,7 +1291,7 @@ async function setupDemoName(client, pin) {
   const name = demoNameForIndex(client.index);
   log(`  client ${client.index}: session + profile ${name}`);
   const npub = await withMcp(client.ports.mcpBridge, async bridge => {
-    const account = await ensureSession(bridge, pin, client.seeded);
+    const account = await ensureSession(bridge, pin, client);
     const existing = await currentProfileName(bridge, account);
     if (existing === name) {
       log(`    name already ${name}; skipping profile update`);
@@ -1266,14 +1320,23 @@ async function setupDemoName(client, pin) {
   log(`    ${name} ${npub}`);
 }
 
-async function runDemoOrchestration(clients, pin) {
-  const named = clients.filter(c => c.npub);
+function namedClients(clients) {
+  return clients.filter(c => c.npub);
+}
+
+function demoLeadAndOthers(named) {
+  const first = named.find(c => c.index === 1) || named[0];
+  const others = named.filter(c => c !== first);
+  return { first, others };
+}
+
+async function runBroadcasts(clients, pin) {
+  const named = namedClients(clients);
   if (named.length === 0) {
-    log('orchestration: no named clients, skipping');
+    log('broadcast: no named clients, skipping');
     return;
   }
-
-  log('loop 2: 24h Commons broadcasts');
+  log('Commons broadcasts');
   for (const client of named) {
     try {
       await withMcp(client.ports.mcpBridge, async bridge => {
@@ -1286,12 +1349,17 @@ async function runDemoOrchestration(clients, pin) {
       log(`  client ${client.index}: broadcast failed: ${err.message}`);
     }
   }
+}
 
-  if (named.length < 2) return;
-  const first = named.find(c => c.index === 1) || named[0];
-  const others = named.filter(c => c !== first);
+async function runDms(clients) {
+  const named = namedClients(clients).filter(c => isAlive(c.pid));
+  if (named.length < 2) {
+    log('dm: need at least 2 named clients');
+    return;
+  }
+  const { first, others } = demoLeadAndOthers(named);
 
-  log('loop 3: demo 1 DMs other clients');
+  log('demo 1 DMs other clients');
   const outboundIds = new Map();
   await withMcp(first.ports.mcpBridge, async bridge => {
     for (const peer of others) {
@@ -1313,7 +1381,7 @@ async function runDemoOrchestration(clients, pin) {
     }
   });
 
-  log('loop 4: other clients reply to demo 1');
+  log('other clients reply to demo 1');
   for (const peer of others) {
     const content = `hello from ${peer.name}`;
     const repliedTo = outboundIds.get(peer.index) || '';
@@ -1332,28 +1400,225 @@ async function runDemoOrchestration(clients, pin) {
       log(`  ${peer.name} -> ${first.name} failed: ${err.message}`);
     }
   }
+}
 
+async function saveSquadNetworkSepolia(bridge, npub, groupId) {
+  const script = `(() => {
+    const key = ${JSON.stringify(`pacto_squad_network_v1_${npub}`)};
+    const groupId = ${JSON.stringify(groupId)};
+    let blob = { v: 1, byParentId: {} };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+      if (parsed && parsed.v === 1 && parsed.byParentId && typeof parsed.byParentId === 'object') {
+        blob = parsed;
+      }
+    } catch {}
+    blob.v = 1;
+    blob.byParentId = blob.byParentId || {};
+    blob.byParentId[groupId] = ${JSON.stringify(DEMO_SQUAD_NETWORK)};
+    localStorage.setItem(key, JSON.stringify(blob));
+    return true;
+  })()`;
+  await executeJs(bridge, script);
+}
+
+async function runSquad(clients, pin, { all = false } = {}) {
+  const named = namedClients(clients).filter(c => isAlive(c.pid));
+  if (named.length < 2) {
+    log('squad: need at least 2 named clients');
+    return;
+  }
+  const { first, others } = demoLeadAndOthers(named);
   const second = named.find(c => c.index === 2) || others[0];
-  if (!second) return;
-  log(`loop 5: ${first.name} creates squad with ${second.name}`);
+  const invitees = all ? others : [second];
+  const memberIds = invitees.map(c => c.npub);
+  log(
+    `squad: ${first.name} creates ${DEMO_SQUAD_NAME} on ${DEMO_SQUAD_NETWORK}, invites ${invitees.map(c => c.name).join(', ')}`,
+  );
+
+  const members = [first, ...invitees];
+  for (const client of members) {
+    try {
+      await withMcp(client.ports.mcpBridge, async bridge => {
+        await invokeTauri(bridge, 'regenerate_device_keypackage', { cache: true });
+      });
+    } catch (err) {
+      log(`  client ${client.index}: keypackage refresh failed: ${err.message}`);
+    }
+  }
+
+  const already = await withMcp(first.ports.mcpBridge, async bridge => {
+    try {
+      const rows = await invokeTauri(bridge, 'list_squads');
+      const list = Array.isArray(rows) ? rows : [];
+      return list.find(s => s && s.name === DEMO_SQUAD_NAME) || null;
+    } catch {
+      return null;
+    }
+  });
+  if (already?.id) {
+    log(`  ${DEMO_SQUAD_NAME} already exists (${String(already.id).slice(0, 16)}…); reloading windows`);
+    for (const client of members) {
+      try {
+        await withMcp(client.ports.mcpBridge, async bridge => {
+          await reloadWebview(bridge, pin);
+        });
+      } catch (err) {
+        log(`  client ${client.index}: reload failed: ${err.message}`);
+      }
+    }
+    return;
+  }
+
   const deadline = Date.now() + SQUAD_RETRY_MS;
   let lastErr = null;
+  let groupId = null;
   while (Date.now() < deadline) {
     try {
-      const groupId = await withMcp(first.ports.mcpBridge, async bridge => {
+      groupId = await withMcp(first.ports.mcpBridge, async bridge => {
         return invokeTauri(bridge, 'create_group_chat', {
-          groupName: 'demo-squad',
-          memberIds: [second.npub],
+          groupName: 'announcements',
+          memberIds,
         });
       });
-      log(`  demo-squad ${typeof groupId === 'string' ? groupId.slice(0, 16) : groupId}`);
-      return;
+      break;
     } catch (err) {
       lastErr = err;
+      log(`  squad create retry: ${err.message}`);
       await sleep(2_000);
     }
   }
-  log(`  squad create failed: ${lastErr?.message || 'unknown error'}`);
+  if (!groupId) {
+    log(`  squad create failed: ${lastErr?.message || 'unknown error'}`);
+    return;
+  }
+  log(`  MLS announcements ${typeof groupId === 'string' ? groupId.slice(0, 16) : groupId}…`);
+
+  const now = Date.now();
+  await withMcp(first.ports.mcpBridge, async bridge => {
+    await invokeTauri(bridge, 'upsert_squad', {
+      squad: {
+        id: groupId,
+        name: DEMO_SQUAD_NAME,
+        iconUrl: null,
+        channels: [
+          { name: 'announcements', groupId, order: 0 },
+          { name: 'polls', groupId, order: 1 },
+        ],
+        kind: 'squad',
+        pairedSquads: null,
+        visibility: 'public',
+        commonsTags: DEMO_SQUAD_TAGS,
+        createdAtMs: now,
+        updatedAtMs: now,
+      },
+    });
+    try {
+      await invokeTauri(bridge, 'squad_bot_init', { squadId: groupId });
+    } catch (err) {
+      log(`  squad bot init failed: ${err.message}`);
+    }
+    try {
+      await saveSquadNetworkSepolia(bridge, first.npub, groupId);
+    } catch (err) {
+      log(`  sepolia network save failed: ${err.message}`);
+    }
+    const inviteBody = JSON.stringify({
+      type: 'squad_invite',
+      squadName: DEMO_SQUAD_NAME,
+      groupId,
+      kind: 'squad',
+      invitedByNpub: first.npub,
+    });
+    for (const peer of invitees) {
+      try {
+        await invokeTauri(bridge, 'message', {
+          receiver: peer.npub,
+          content: inviteBody,
+          repliedTo: '',
+          file: null,
+          virtualBucket: null,
+        });
+        log(`  invite DM -> ${peer.name}`);
+      } catch (err) {
+        log(`  invite DM -> ${peer.name} failed: ${err.message}`);
+      }
+    }
+    try {
+      await invokeTauri(bridge, 'commons_publish_broadcast', {
+        input: {
+          subject: 'squad',
+          message: `New squad: ${DEMO_SQUAD_NAME}`,
+          durationHours: 72,
+          tags: [...DEMO_SQUAD_TAGS, 'new'],
+          squad: {
+            id: groupId,
+            name: DEMO_SQUAD_NAME,
+            kind: 'squad',
+            iconUrl: null,
+          },
+        },
+      });
+      log(`  Commons broadcast #${DEMO_SQUAD_TAGS[0]}`);
+    } catch (err) {
+      log(`  Commons broadcast failed: ${err.message}`);
+    }
+  });
+
+  for (const client of members) {
+    try {
+      await withMcp(client.ports.mcpBridge, async bridge => {
+        await reloadWebview(bridge, pin);
+      });
+    } catch (err) {
+      log(`  client ${client.index}: reload failed: ${err.message}`);
+    }
+  }
+}
+
+function demoPin(args) {
+  const seedConfig = loadSeedConfig({
+    seeds: args?.seeds ?? [],
+    pin: args?.pin ?? null,
+    envFile: args?.envFile ?? null,
+  });
+  return (seedConfig.pin && String(seedConfig.pin).trim()) || DEFAULT_DEMO_PIN;
+}
+
+async function loadLiveSession(args) {
+  const state = readPidsFile();
+  const live = (state?.clients ?? []).filter(c => isAlive(c.pid));
+  if (live.length === 0) {
+    throw new Error('no running demo clients (run make up first)');
+  }
+  const pin = demoPin(args);
+  for (const client of live) {
+    if (!client.name) client.name = demoNameForIndex(client.index);
+    if (client.npub) continue;
+    try {
+      const npub = await withMcp(client.ports.mcpBridge, async bridge => {
+        await waitForTauri(bridge);
+        return tryCurrentAccount(bridge);
+      });
+      if (npub) client.npub = npub;
+    } catch (err) {
+      log(`  client ${client.index}: could not read npub: ${err.message}`);
+    }
+  }
+  writePidsFile(state);
+  return { state, clients: live, pin };
+}
+
+async function cmdDm(args) {
+  const { state, clients } = await loadLiveSession(args);
+  await runDms(clients);
+  writePidsFile(state);
+}
+
+async function cmdSquad(args) {
+  const { state, clients, pin } = await loadLiveSession(args);
+  await runSquad(clients, pin, { all: Boolean(args.all) });
+  writePidsFile(state);
 }
 
 async function cancelDemoBroadcast(client, { quiet = false } = {}) {
@@ -1373,7 +1638,9 @@ async function cancelDemoBroadcast(client, { quiet = false } = {}) {
   }
 }
 
-async function cmdUp(args) {
+async function cmdUp(args, opts = {}) {
+  const full = Boolean(opts.full) || Boolean(args.full) || args.command === 'up-full';
+  log(full ? 'mode: up-full (login, broadcast, DMs, squad)' : 'mode: up (login, broadcast)');
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
   const launchArgs = {
@@ -1497,14 +1764,20 @@ async function cmdUp(args) {
     writePidsFile(state);
   }
 
-  await runDemoOrchestration(state.clients, (pin && String(pin).trim()) || DEFAULT_DEMO_PIN);
+  const demoPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
+  await runBroadcasts(state.clients, demoPin);
+  if (full) {
+    log('up-full: DMs + squad');
+    await runDms(state.clients);
+    await runSquad(state.clients, demoPin, { all: false });
+  }
   writePidsFile(state);
   log('');
   log(`launched ${clients} client(s). Storage persists until wipe.`);
   log('  node pacto-demo.mjs status');
-  log('  node pacto-demo.mjs reload');
+  log('  node pacto-demo.mjs dm');
+  log('  node pacto-demo.mjs squad');
   log('  node pacto-demo.mjs down');
-  log('  node pacto-demo.mjs down --wipe');
 }
 
 async function main() {
@@ -1524,8 +1797,15 @@ async function main() {
         log(USAGE);
         break;
       case 'up':
+      case 'up-full':
       case 'reload':
-        await cmdUp(args);
+        await cmdUp(args, { full: args.command === 'up-full' || args.full });
+        break;
+      case 'dm':
+        await cmdDm(args);
+        break;
+      case 'squad':
+        await cmdSquad(args);
         break;
       case 'down':
         await cmdDown({ wipe: args.wipe });
