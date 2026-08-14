@@ -17,33 +17,39 @@ Anyone can clone this repo, copy `.env.example` to `.env`, set `PR` / `CLIENTS` 
 git clone <this-repo>
 cd pacto-demo-deployer
 cp .env.example .env    # then set PR, CLIENTS, and PACTO_DEMO_SEED_N
-
-node pacto-demo.mjs up
-node pacto-demo.mjs reload    # pull latest PR/branch commits and rebuild (storage kept)
-
-node pacto-demo.mjs status
-node pacto-demo.mjs down
-node pacto-demo.mjs down --wipe
-
-node pacto-demo.mjs wipe --client 1
-node pacto-demo.mjs wipe --all
 ```
 
-CLI flags override `.env` (`--pr`, `--branch`, `--clients`). Makefile equivalents:
+Launch (CLI flags override `.env`):
 
 ```bash
-make up
-make up-full
+make up                 # login, backup seed, profile, Commons user broadcast
+make up-full            # up, then DMs + squad
+make reload             # fetch latest PR/branch commits and rebuild (storage kept)
+make up PR=123 CLIENTS=3
+make up BRANCH=feat/gov-ux-improvements CLIENTS=2
+```
+
+Scenarios on a live session (`pids.json` required):
+
+```bash
 make dm
 make squad
-make squad-join
-make reload
+make squad NAME=my-squad
+make squad-all
+make squad-join         # accept a pending invite without creating another squad
+```
+
+Lifecycle:
+
+```bash
 make status
 make down
 make down-wipe
 make wipe CLIENT=1
 make wipe-all
 ```
+
+Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--full`, `--all`, `--join`, `--name`, `--wipe`). `make help` prints the full list.
 
 First `up` clones [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) into `.cache/pacto-app`. Override the remote with `PACTO_APP_REMOTE` in `.env`.
 
@@ -63,6 +69,18 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 
 `reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept.
 
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `up` | Launch clients, login/create, write `backups/client-<n>.txt`, set demo names (`alpha-test`, `bravo-test`, …), Commons user broadcast |
+| `up-full` | `up`, then `dm`, then `squad` |
+| `reload` | Same launch path as `up` after updating the pacto-app worktree |
+| `dm` | Client 1 DMs the others; they reply. Requires a live session |
+| `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `alpha-squad-test-<n>` |
+| `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
+| `status` / `down` / `wipe` | Inspect, stop, or delete `io.pacto.demo.<n>` storage |
+
 ## Isolation
 
 | Client | Identifier | App data (macOS) | Ports (dev / hmr / mcp) |
@@ -80,7 +98,7 @@ make wipe CLIENT=1
 # rm -rf "$HOME/Library/Application Support/io.pacto.demo.1"
 ```
 
-Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account.
+Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account. After session, the deployer writes the recovery phrase to gitignored `backups/client-<n>.txt` (mode 0600) and does not log it.
 
 ## Layout
 
@@ -88,7 +106,8 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 
 - `src/lib/` — config, isolation/ports, git worktree, MCP, session, launch
 - `src/commands/` — `up` / `reload` / `up-full` and lifecycle (`down`, `status`, `wipe`)
-- `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module + registry row for a new branch test
+- `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module and one row in [`src/scenarios/index.mjs`](src/scenarios/index.mjs) for a new branch test
+- Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
 - `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo
 - `docs/plans/` / `docs/solutions/` — accepted plans and compounded learnings
 
@@ -99,4 +118,5 @@ Runtime / gitignored:
 - `worktrees/<slug>/` — detached checkout of the chosen PR or branch
 - `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`)
 - `logs/client-<n>.log` — `tauri dev` output
-- `pids.json` — running client PIDs for `down` / `status`
+- `pids.json` — running client PIDs for `down` / `status` / scenarios
+- `backups/client-<n>.txt` — seed phrases after session (mode 0600; never commit)
