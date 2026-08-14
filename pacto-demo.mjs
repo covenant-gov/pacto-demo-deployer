@@ -47,7 +47,7 @@ const PORT_POLL_MS = 1_000;
 const DEFAULT_ENV_FILE = path.join(DEPLOYER_DIR, '.env');
 const SEED_ENV_RE = /^PACTO_DEMO_SEED_([1-9][0-9]*)$/;
 const DEFAULT_DEMO_PIN = '123456';
-const DEMO_SQUAD_NAME = 'alpha-squad-test';
+const DEMO_SQUAD_NAME_PREFIX = 'alpha-squad-test';
 const DEMO_SQUAD_NETWORK = 'sepolia';
 const DEMO_SQUAD_TAGS = ['test', 'demo', 'alpha'];
 const NATO_WORDS = [
@@ -75,7 +75,8 @@ Usage:
   node pacto-demo.mjs up        # launch, login/create, backup seed, profile, broadcast
   node pacto-demo.mjs up-full   # same as: up --full (DMs + squad after launch)
   node pacto-demo.mjs dm        # client 1 DMs others; they reply (clients must be up)
-  node pacto-demo.mjs squad     # client 1 creates alpha-squad-test with bravo-test (Sepolia, Commons #test)
+  node pacto-demo.mjs squad     # alpha-squad-test-<n> with bravo-test (Sepolia, Commons #test)
+  node pacto-demo.mjs squad --name my-squad
   node pacto-demo.mjs squad --all
   node pacto-demo.mjs up --pr <n> --clients <n>
   node pacto-demo.mjs up --branch <name> --clients <n>
@@ -93,6 +94,7 @@ Options:
   --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N (default: .env next to this script)
   --seed "<phrase>"     Repeatable; overrides PACTO_DEMO_SEED_1, then _2, ...
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
+  --name <name>         Squad display name (default: alpha-squad-test-<n>)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
   --full                After up: also run DMs and squad (client 1 invites client 2)
@@ -106,6 +108,7 @@ Makefile:
   make up-full
   make dm
   make squad
+  make squad NAME=my-squad
   make squad-all
   make reload
   make down
@@ -311,6 +314,7 @@ function parseArgs(argv) {
     all: false,
     wipe: false,
     full: false,
+    name: null,
   };
   const rest = argv.slice(2);
   if (rest.length === 0) return out;
@@ -359,6 +363,10 @@ function parseArgs(argv) {
         break;
       case '--client':
         out.client = take(arg, i, rest);
+        i += 1;
+        break;
+      case '--name':
+        out.name = take(arg, i, rest);
         i += 1;
         break;
       case '--all':
@@ -1402,6 +1410,34 @@ async function runDms(clients) {
   }
 }
 
+async function listSquadNames(bridge) {
+  try {
+    const rows = await invokeTauri(bridge, 'list_squads');
+    return (Array.isArray(rows) ? rows : []).map(s => s?.name).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function nextNumberedSquadName(existingNames, prefix) {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${escaped}-([1-9][0-9]*)$`);
+  let max = 0;
+  for (const name of existingNames) {
+    if (name === prefix) max = Math.max(max, 0);
+    const m = re.exec(name);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}-${max + 1}`;
+}
+
+async function resolveSquadName(bridge, requested) {
+  const custom = requested && String(requested).trim();
+  if (custom) return custom;
+  const names = await listSquadNames(bridge);
+  return nextNumberedSquadName(names, DEMO_SQUAD_NAME_PREFIX);
+}
+
 async function saveSquadNetworkSepolia(bridge, npub, groupId) {
   const script = `(() => {
     const key = ${JSON.stringify(`pacto_squad_network_v1_${npub}`)};
@@ -1422,7 +1458,7 @@ async function saveSquadNetworkSepolia(bridge, npub, groupId) {
   await executeJs(bridge, script);
 }
 
-async function runSquad(clients, pin, { all = false } = {}) {
+async function runSquad(clients, pin, { all = false, name = null } = {}) {
   const named = namedClients(clients).filter(c => isAlive(c.pid));
   if (named.length < 2) {
     log('squad: need at least 2 named clients');
@@ -1432,11 +1468,15 @@ async function runSquad(clients, pin, { all = false } = {}) {
   const second = named.find(c => c.index === 2) || others[0];
   const invitees = all ? others : [second];
   const memberIds = invitees.map(c => c.npub);
-  log(
-    `squad: ${first.name} creates ${DEMO_SQUAD_NAME} on ${DEMO_SQUAD_NETWORK}, invites ${invitees.map(c => c.name).join(', ')}`,
-  );
 
   const members = [first, ...invitees];
+  const squadName = await withMcp(first.ports.mcpBridge, async bridge => {
+    await waitForTauri(bridge);
+    return resolveSquadName(bridge, name);
+  });
+  log(
+    `squad: ${first.name} creates ${squadName} on ${DEMO_SQUAD_NETWORK}, invites ${invitees.map(c => c.name).join(', ')}`,
+  );
   for (const client of members) {
     try {
       await withMcp(client.ports.mcpBridge, async bridge => {
@@ -1445,29 +1485,6 @@ async function runSquad(clients, pin, { all = false } = {}) {
     } catch (err) {
       log(`  client ${client.index}: keypackage refresh failed: ${err.message}`);
     }
-  }
-
-  const already = await withMcp(first.ports.mcpBridge, async bridge => {
-    try {
-      const rows = await invokeTauri(bridge, 'list_squads');
-      const list = Array.isArray(rows) ? rows : [];
-      return list.find(s => s && s.name === DEMO_SQUAD_NAME) || null;
-    } catch {
-      return null;
-    }
-  });
-  if (already?.id) {
-    log(`  ${DEMO_SQUAD_NAME} already exists (${String(already.id).slice(0, 16)}…); reloading windows`);
-    for (const client of members) {
-      try {
-        await withMcp(client.ports.mcpBridge, async bridge => {
-          await reloadWebview(bridge, pin);
-        });
-      } catch (err) {
-        log(`  client ${client.index}: reload failed: ${err.message}`);
-      }
-    }
-    return;
   }
 
   const deadline = Date.now() + SQUAD_RETRY_MS;
@@ -1499,7 +1516,7 @@ async function runSquad(clients, pin, { all = false } = {}) {
     await invokeTauri(bridge, 'upsert_squad', {
       squad: {
         id: groupId,
-        name: DEMO_SQUAD_NAME,
+        name: squadName,
         iconUrl: null,
         channels: [
           { name: 'announcements', groupId, order: 0 },
@@ -1525,7 +1542,7 @@ async function runSquad(clients, pin, { all = false } = {}) {
     }
     const inviteBody = JSON.stringify({
       type: 'squad_invite',
-      squadName: DEMO_SQUAD_NAME,
+      squadName,
       groupId,
       kind: 'squad',
       invitedByNpub: first.npub,
@@ -1548,12 +1565,12 @@ async function runSquad(clients, pin, { all = false } = {}) {
       await invokeTauri(bridge, 'commons_publish_broadcast', {
         input: {
           subject: 'squad',
-          message: `New squad: ${DEMO_SQUAD_NAME}`,
+          message: `New squad: ${squadName}`,
           durationHours: 72,
           tags: [...DEMO_SQUAD_TAGS, 'new'],
           squad: {
             id: groupId,
-            name: DEMO_SQUAD_NAME,
+            name: squadName,
             kind: 'squad',
             iconUrl: null,
           },
@@ -1617,7 +1634,7 @@ async function cmdDm(args) {
 
 async function cmdSquad(args) {
   const { state, clients, pin } = await loadLiveSession(args);
-  await runSquad(clients, pin, { all: Boolean(args.all) });
+  await runSquad(clients, pin, { all: Boolean(args.all), name: args.name });
   writePidsFile(state);
 }
 
@@ -1769,7 +1786,7 @@ async function cmdUp(args, opts = {}) {
   if (full) {
     log('up-full: DMs + squad');
     await runDms(state.clients);
-    await runSquad(state.clients, demoPin, { all: false });
+    await runSquad(state.clients, demoPin, { all: false, name: args.name });
   }
   writePidsFile(state);
   log('');
