@@ -28,6 +28,7 @@ import {
   storageDirForClient,
   writePidsFile,
 } from '../lib/process.mjs';
+import { assertClaimFree, claimForClient } from '../lib/claims.mjs';
 import { demoNameForIndex, setupDemoName } from '../lib/session.mjs';
 import { runScenario } from '../scenarios/index.mjs';
 import { cmdDown } from './lifecycle.mjs';
@@ -68,6 +69,7 @@ export async function cmdUp(args, opts = {}) {
     identifierForClient(i);
     portsForIndex(i);
     storageDirForClient(i);
+    assertClaimFree(i);
   }
 
   const existing = readPidsFile();
@@ -115,6 +117,7 @@ export async function cmdUp(args, opts = {}) {
       throw new Error('internal error: overlay would collide with the main client');
     }
 
+    assertClaimFree(i);
     if (!(await allPortsFree(ports))) {
       throw new Error(
         `ports for client ${i} are in use ` +
@@ -132,6 +135,7 @@ export async function cmdUp(args, opts = {}) {
     const kind = mnemonic ? 'seeded account' : 'fresh session (no mnemonic)';
     log(`launching client ${i} ${identifier} :${ports.devServer} — ${kind}`);
     const pid = spawnClient({ index: i, worktreePath, overlay, env, logPath });
+    claimForClient(i, pid);
     const row = {
       index: i,
       identifier,

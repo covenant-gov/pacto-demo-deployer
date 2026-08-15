@@ -56,6 +56,13 @@ CLI flags override `.env` (`--pr`, `--branch`, `--clients`, `--pin`, `--name`).
 - Identifiers are `io.pacto.demo.<n>` with `n >= 1`. Ports: `1420+10n` /
   `1421+10n` / `9223+100n`. Index 0 ports `1420/1421/9223` are reserved.
 - Dual-stack probes on `127.0.0.1` and `::1` before bind and for ready checks.
+- Dev-port claims: before binding, and again once bound, each client
+  participates in pacto-app's on-disk claim protocol
+  (`<os.tmpdir()>/pacto-dev-ports-claims/index-<n>.claim.json`, see
+  `src/lib/claims.mjs`) so this repo and pacto-app sandboxes never silently
+  race for the same localhost ports. A live foreign claim is a loud refusal,
+  never a silent port change — this repo's ports are pinned to the client
+  number.
 - MCP: `ws://127.0.0.1:<mcpBridge>` → `execute_js` → `window.__TAURI__.core.invoke`.
 - Unseeded clients land on **Enter your PIN** after webview reload; paste the
   demo PIN onto unlock digits only (not Create/Confirm).
