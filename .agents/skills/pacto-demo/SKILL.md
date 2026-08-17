@@ -28,8 +28,12 @@ license: MIT
 
 - Client 1 `alpha-test`, client 2 `bravo-test` (`demoNameForIndex`).
 - `make up` = launch + session + Commons user broadcast.
+- `make down` retracts user and catalog-squad Commons broadcasts before stop.
 - `make dm` / `make squad` require live `pids.json`.
 - Squad: MLS `announcements`, catalog upsert, invite DM, invitee Accept.
+  Do not regenerate invitee keypackages immediately before create; if no
+  pending welcome, republish a keypackage and `invite_member_to_group`.
+- User and squad Commons broadcast messages append `formatDemoStamp()`.
 - `squad --join` accepts an existing invite; it does not create another squad.
 
 ## Adding a scenario

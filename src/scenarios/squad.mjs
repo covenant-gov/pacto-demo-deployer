@@ -3,8 +3,10 @@ import {
   DEMO_SQUAD_NETWORK,
   DEMO_SQUAD_TAGS,
   SQUAD_ACCEPT_UI_WAIT_MS,
+  SQUAD_KEYPACKAGE_WAIT_MS,
   SQUAD_RETRY_MS,
   SQUAD_WELCOME_WAIT_MS,
+  formatDemoStamp,
 } from '../lib/config.mjs';
 import { executeJs, invokeTauri, waitForTauri, withMcp } from '../lib/mcp.mjs';
 import { isAlive, log, sleep, writePidsFile } from '../lib/process.mjs';
@@ -69,6 +71,56 @@ function sameMlsGroupId(a, b) {
   return Boolean(left) && left === norm(b);
 }
 
+function welcomeGroupId(row) {
+  return row?.nostr_group_id || row?.nostrGroupId || '';
+}
+
+async function refreshContactKeypackages(bridge, npub) {
+  const devices = await invokeTauri(bridge, 'refresh_keypackages_for_contact', { npub });
+  return Array.isArray(devices) ? devices : [];
+}
+
+async function waitForInviteeKeypackages(bridge, npub, timeoutMs = SQUAD_KEYPACKAGE_WAIT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr = null;
+  while (Date.now() < deadline) {
+    try {
+      const devices = await refreshContactKeypackages(bridge, npub);
+      if (devices.length > 0) return devices;
+    } catch (err) {
+      lastErr = err;
+    }
+    await sleep(2_000);
+  }
+  const detail = lastErr ? `: ${lastErr.message}` : '';
+  throw new Error(`no keypackages for invitee${detail}`);
+}
+
+async function publishFreshKeypackage(client) {
+  await withMcp(client.ports.mcpBridge, async bridge => {
+    await waitForTauri(bridge);
+    await invokeTauri(bridge, 'regenerate_device_keypackage', { cache: false });
+  });
+}
+
+async function ensureInviteeKeypackages(creator, invitee) {
+  const ready = await withMcp(creator.ports.mcpBridge, async bridge => {
+    await waitForTauri(bridge);
+    try {
+      await waitForInviteeKeypackages(bridge, invitee.npub);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (ready) return;
+  log(`  ${invitee.name}: publishing device keypackage`);
+  await publishFreshKeypackage(invitee);
+  await withMcp(creator.ports.mcpBridge, async bridge => {
+    await waitForInviteeKeypackages(bridge, invitee.npub);
+  });
+}
+
 function squadCatalogPayload(groupId, squadName, now) {
   return {
     id: groupId,
@@ -99,7 +151,7 @@ async function listMlsGroupIds(bridge) {
 async function findPendingWelcome(bridge, groupId) {
   const list = await invokeTauri(bridge, 'list_pending_mls_welcomes');
   const rows = Array.isArray(list) ? list : [];
-  return rows.find(row => sameMlsGroupId(row?.nostr_group_id, groupId)) || (rows.length === 1 ? rows[0] : null);
+  return rows.find(row => sameMlsGroupId(welcomeGroupId(row), groupId)) || (rows.length === 1 ? rows[0] : null);
 }
 
 async function waitForPendingWelcome(bridge, groupId, timeoutMs = SQUAD_WELCOME_WAIT_MS) {
@@ -164,10 +216,32 @@ async function waitForInviteAccepted(bridge, groupId, timeoutMs = SQUAD_ACCEPT_U
   return false;
 }
 
-async function acceptSquadInviteOnClient(invitee, groupId, squadName, now) {
+async function reinviteMember(creator, invitee, groupId) {
+  log(`  ${invitee.name}: no pending welcome; republish keypackage and re-invite`);
+  await publishFreshKeypackage(invitee);
+  await withMcp(creator.ports.mcpBridge, async bridge => {
+    await waitForTauri(bridge);
+    await waitForInviteeKeypackages(bridge, invitee.npub);
+    await invokeTauri(bridge, 'invite_member_to_group', {
+      groupId,
+      memberNpub: invitee.npub,
+    });
+  });
+}
+
+async function acceptSquadInviteOnClient(invitee, groupId, squadName, now, { creator } = {}) {
   await withMcp(invitee.ports.mcpBridge, async bridge => {
     await waitForTauri(bridge);
-    const welcome = await waitForPendingWelcome(bridge, groupId);
+    let welcome = await waitForPendingWelcome(bridge, groupId);
+    if (welcome === 'already_member') {
+      await persistInviteeSquad(bridge, invitee, groupId, squadName, now);
+      log(`  ${invitee.name}: already in MLS group`);
+      return;
+    }
+    if (!welcome && creator) {
+      await reinviteMember(creator, invitee, groupId);
+      welcome = await waitForPendingWelcome(bridge, groupId);
+    }
     if (welcome === 'already_member') {
       await persistInviteeSquad(bridge, invitee, groupId, squadName, now);
       log(`  ${invitee.name}: already in MLS group`);
@@ -225,13 +299,11 @@ export async function run(ctx, opts = {}) {
   log(
     `squad: ${first.name} creates ${squadName} on ${DEMO_SQUAD_NETWORK}, invites ${invitees.map(c => c.name).join(', ')}`,
   );
-  for (const client of members) {
+  for (const peer of invitees) {
     try {
-      await withMcp(client.ports.mcpBridge, async bridge => {
-        await invokeTauri(bridge, 'regenerate_device_keypackage', { cache: true });
-      });
+      await ensureInviteeKeypackages(first, peer);
     } catch (err) {
-      log(`  client ${client.index}: keypackage refresh failed: ${err.message}`);
+      log(`  ${peer.name}: keypackage not ready: ${err.message}`);
     }
   }
 
@@ -299,7 +371,7 @@ export async function run(ctx, opts = {}) {
       await invokeTauri(bridge, 'commons_publish_broadcast', {
         input: {
           subject: 'squad',
-          message: `New squad: ${squadName}`,
+          message: `New squad: ${squadName} · ${formatDemoStamp()}`,
           durationHours: 72,
           tags: [...DEMO_SQUAD_TAGS, 'new'],
           squad: {
@@ -318,7 +390,7 @@ export async function run(ctx, opts = {}) {
 
   for (const peer of invitees) {
     try {
-      await acceptSquadInviteOnClient(peer, groupId, squadName, now);
+      await acceptSquadInviteOnClient(peer, groupId, squadName, now, { creator: first });
     } catch (err) {
       log(`  ${peer.name}: accept failed: ${err.message}`);
     }
@@ -365,7 +437,7 @@ export async function joinExisting(ctx, opts = {}) {
   const now = Date.now();
   for (const peer of invitees) {
     try {
-      await acceptSquadInviteOnClient(peer, squad.id, squad.name, now);
+      await acceptSquadInviteOnClient(peer, squad.id, squad.name, now, { creator: first });
     } catch (err) {
       log(`  ${peer.name}: accept failed: ${err.message}`);
     }

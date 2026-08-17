@@ -49,10 +49,22 @@ export const SESSION_WAIT_MS = 30_000;
 export const PIN_UNLOCK_WAIT_MS = 15_000;
 export const SQUAD_RETRY_MS = 30_000;
 export const SQUAD_WELCOME_WAIT_MS = 45_000;
+export const SQUAD_KEYPACKAGE_WAIT_MS = 20_000;
 export const SQUAD_ACCEPT_UI_WAIT_MS = 12_000;
 export const CANCEL_BROADCAST_MS = 15_000;
 export const MESSAGE_ID_WAIT_MS = 15_000;
 export const LOOPBACK_HOSTS = ['127.0.0.1', '::1'];
+
+export function formatDemoStamp(date = new Date()) {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
 
 export function parsePositiveInt(value, label) {
   const n = Number(value);

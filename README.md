@@ -79,7 +79,7 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 | `dm` | Client 1 DMs the others; they reply. Requires a live session |
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `alpha-squad-test-<n>` |
 | `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
-| `status` / `down` / `wipe` | Inspect, stop, or delete `io.pacto.demo.<n>` storage |
+| `status` / `down` / `wipe` | Inspect, stop (after retracting Commons user and squad broadcasts), or delete `io.pacto.demo.<n>` storage |
 
 ## Isolation
 
