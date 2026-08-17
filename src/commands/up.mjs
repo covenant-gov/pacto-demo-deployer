@@ -49,6 +49,10 @@ export async function cmdUp(args, opts = {}) {
   } else {
     log(`seeds: no .env at ${seedConfig.envPath} (copy .env.example to .env); extra clients stay fresh`);
   }
+  const operatorKeys = Object.keys(seedConfig.operatorEnv ?? {});
+  if (operatorKeys.length) {
+    log(`operator env: ${operatorKeys.join(', ')}`);
+  }
 
   if (launchArgs.clients == null || launchArgs.clients === '') {
     throw new Error('up requires --clients <n> or CLIENTS in .env');
@@ -127,7 +131,7 @@ export async function cmdUp(args, opts = {}) {
     }
 
     const logPath = path.join(LOGS_DIR, `client-${i}.log`);
-    const env = launchEnv(i, ports, mnemonic, pin);
+    const env = launchEnv(i, ports, mnemonic, pin, seedConfig.operatorEnv ?? {});
     if (env.PACTO_TEST_SANDBOX_ROOT || env.PACTO_DEV_WORLD) {
       throw new Error('internal error: sandbox env leaked into launch');
     }

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PORT_POLL_MS, TARGETS_DIR } from './config.mjs';
+import { applyOperatorEnv, PORT_POLL_MS, TARGETS_DIR } from './config.mjs';
 import {
   assertSafePorts,
   identifierForClient,
@@ -41,7 +41,7 @@ export function tauriOverlay(index, ports, windowTemplate) {
   };
 }
 
-export function launchEnv(index, ports, mnemonic, pin) {
+export function launchEnv(index, ports, mnemonic, pin, operatorEnv = {}) {
   const env = { ...process.env };
   env.PACTO_DEV_PORT = String(ports.devServer);
   env.PACTO_DEV_HMR_PORT = String(ports.hmr);
@@ -50,6 +50,7 @@ export function launchEnv(index, ports, mnemonic, pin) {
   env.CARGO_TARGET_DIR = path.join(TARGETS_DIR, String(index));
   if (mnemonic) env.PACTO_DEV_LOGIN_MNEMONIC = mnemonic;
   if (pin) env.PACTO_DEV_LOGIN_PIN = pin;
+  applyOperatorEnv(env, operatorEnv);
   delete env.PACTO_TEST_SANDBOX_ROOT;
   delete env.PACTO_DEV_WORLD;
   return env;

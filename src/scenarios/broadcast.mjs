@@ -1,4 +1,4 @@
-import { CANCEL_BROADCAST_MS } from '../lib/config.mjs';
+import { CANCEL_BROADCAST_MS, formatDemoStamp } from '../lib/config.mjs';
 import { invokeTauri, withMcp } from '../lib/mcp.mjs';
 import { isAlive, log } from '../lib/process.mjs';
 import { namedClients, reloadWebview } from '../lib/session.mjs';
@@ -21,7 +21,7 @@ async function publishDemoBroadcast(bridge, npub, name) {
   await invokeTauri(bridge, 'commons_publish_broadcast', {
     input: {
       subject: 'user',
-      message: name,
+      message: `${name} · ${formatDemoStamp()}`,
       durationHours: 24,
       tags: ['test'],
       audience: 'new_user',
@@ -29,18 +29,55 @@ async function publishDemoBroadcast(bridge, npub, name) {
   });
 }
 
+function isExpectedSquadCancelMiss(message) {
+  const text = String(message || '');
+  return (
+    text.includes('Squad bot not initialized') ||
+    text.includes('Only bot key holders') ||
+    text.includes('Local bot secret is stale')
+  );
+}
+
+async function listCatalogSquads(bridge) {
+  try {
+    const rows = await invokeTauri(bridge, 'list_squads');
+    return (Array.isArray(rows) ? rows : []).filter(row => row?.id);
+  } catch {
+    return [];
+  }
+}
+
+async function cancelSubjectBroadcast(bridge, subject, subjectId) {
+  await invokeTauri(
+    bridge,
+    'commons_cancel_broadcast',
+    { subject, subjectId },
+    CANCEL_BROADCAST_MS,
+  );
+}
+
 export async function cancelDemoBroadcast(client, { quiet = false } = {}) {
-  if (!client?.npub || !isAlive(client.pid)) return;
+  if (!client?.ports?.mcpBridge || !isAlive(client.pid)) return;
   try {
     await withMcp(client.ports.mcpBridge, async bridge => {
-      await invokeTauri(
-        bridge,
-        'commons_cancel_broadcast',
-        { subject: 'user', subjectId: client.npub },
-        CANCEL_BROADCAST_MS,
-      );
+      if (client.npub) {
+        try {
+          await cancelSubjectBroadcast(bridge, 'user', client.npub);
+        } catch (err) {
+          if (!quiet) log(`client ${client.index}: cancel user broadcast failed: ${err.message}`);
+        }
+      }
+      for (const squad of await listCatalogSquads(bridge)) {
+        try {
+          await cancelSubjectBroadcast(bridge, 'squad', squad.id);
+        } catch (err) {
+          if (!quiet && !isExpectedSquadCancelMiss(err.message)) {
+            log(`client ${client.index}: cancel squad broadcast failed: ${err.message}`);
+          }
+        }
+      }
     });
-    if (!quiet) log(`client ${client.index}: cancelled broadcast`);
+    if (!quiet) log(`client ${client.index}: cancelled broadcasts`);
   } catch (err) {
     if (!quiet) log(`client ${client.index}: cancel broadcast failed: ${err.message}`);
   }
