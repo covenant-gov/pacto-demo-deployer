@@ -10,10 +10,15 @@ This repository launches **isolated** Pacto desktop demo clients
 checks out a PR or branch, and drives N `tauri dev` windows over MCP.
 
 - Never use, write, or delete **`io.pacto`** (the operator’s main client).
-- Never log seed phrases, mnemonics, or backup file contents.
+- Never log seed phrases, mnemonics, backup file contents, or pacto-app
+  operator secrets (`ALCHEMY_RPC_KEY`, `PIMLICO_API_KEY`, and the rest of
+  `APP_OPERATOR_ENV_KEYS`).
 - Default PIN is `123456` (`PACTO_DEMO_PIN` / `--pin`).
 - Isolation is identifier + ports + app-data directory only. Do not set
   `PACTO_TEST_SANDBOX_ROOT` or `PACTO_DEV_WORLD`.
+- pacto-app RPC / bundler keys live in this repo's `.env` and are forwarded
+  into each `tauri dev` process (`APP_OPERATOR_ENV_KEYS`). Shell env wins
+  over the file. Do not write `.env` into pacto-app worktrees.
 
 Use a plan-first workflow for isolation, wipe, MCP invoke, seed backup, or
 scenario changes. Do not commit, push, or wipe storage unless the user

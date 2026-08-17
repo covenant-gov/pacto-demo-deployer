@@ -2,7 +2,7 @@
 
 Standalone launcher for N isolated Pacto desktop clients against a [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) branch or PR. It never touches the main `io.pacto` account.
 
-Anyone can clone this repo, copy `.env.example` to `.env`, set `PR` / `CLIENTS` / seed phrases, and run `up`. `--pr` / `--branch` always refer to **pacto-app**, which this tool clones into `.cache/pacto-app` on first `up`. Isolation is applied at launch (`tauri dev --config` + env vars); no `demo:` commits are required on pacto-app.
+Anyone can clone this repo, copy `.env.example` to `.env`, set `PR` / `CLIENTS` / seed phrases / pacto-app operator keys, and run `up`. `--pr` / `--branch` always refer to **pacto-app**, which this tool clones into `.cache/pacto-app` on first `up`. Isolation is applied at launch (`tauri dev --config` + env vars); no `demo:` commits are required on pacto-app.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Anyone can clone this repo, copy `.env.example` to `.env`, set `PR` / `CLIENTS` 
 ```bash
 git clone <this-repo>
 cd pacto-demo-deployer
-cp .env.example .env    # then set PR, CLIENTS, and PACTO_DEMO_SEED_N
+cp .env.example .env    # then set PR, CLIENTS, PACTO_DEMO_SEED_N, and ALCHEMY_RPC_KEY
 ```
 
 Launch (CLI flags override `.env`):
@@ -67,6 +67,8 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 
 `PACTO_DEMO_SEED_N` logs into client N. Clients with no matching seed start on the welcome screen. Optional `PACTO_DEMO_PIN` (default `123456`). `--seed` on the CLI overrides the numbered `.env` slot for that client.
 
+pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`, and the other names in pacto-app's [`.env.example`](https://github.com/covenant-gov/pacto-app/blob/main/.env.example)) also live in this repo's `.env`. `up` / `reload` forward the allowlisted keys into each `tauri dev` process. A variable already set in the shell wins. Values are never logged.
+
 `reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept.
 
 ## Commands
@@ -113,7 +115,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 
 Runtime / gitignored:
 
-- `.env` / `.env.example` — `PR` / `CLIENTS` / numbered seed phrases and optional `PACTO_APP_REMOTE`
+- `.env` / `.env.example` — `PR` / `CLIENTS` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
 - `worktrees/<slug>/` — detached checkout of the chosen PR or branch
 - `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`)

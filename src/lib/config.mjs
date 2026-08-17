@@ -33,6 +33,17 @@ export const PORT_POLL_MS = 1_000;
 export const DEFAULT_ENV_FILE = path.join(DEPLOYER_DIR, '.env');
 export const SEED_ENV_RE = /^PACTO_DEMO_SEED_([1-9][0-9]*)$/;
 export const DEFAULT_DEMO_PIN = '123456';
+/** pacto-app debug secrets forwarded from this repo's `.env` into `tauri dev`. */
+export const APP_OPERATOR_ENV_KEYS = [
+  'ALCHEMY_RPC_KEY',
+  'POCKET_RPC_KEY',
+  'VITE_WALLET_RPC_DOCS_URL',
+  'PIMLICO_API_KEY',
+  'BUNDLER_RPC_URL',
+  'PACTO_ERC4337_ACCOUNT_IMPL',
+  'PACTO_TRUSTED_RELAYS',
+  'KLIPY_API_KEY',
+];
 export const DEMO_SQUAD_NAME_PREFIX = 'alpha-squad-test';
 export const DEMO_SQUAD_NETWORK = 'sepolia';
 export const DEMO_SQUAD_TAGS = ['test', 'demo', 'alpha'];
@@ -72,6 +83,29 @@ export function parsePositiveInt(value, label) {
     throw new Error(`${label} must be an integer >= 1, got ${value}`);
   }
   return n;
+}
+
+export function operatorEnvFromVars(vars) {
+  const out = {};
+  for (const key of APP_OPERATOR_ENV_KEYS) {
+    const value = vars?.[key];
+    if (value == null) continue;
+    const trimmed = String(value).trim();
+    if (!trimmed) continue;
+    out[key] = trimmed;
+  }
+  return out;
+}
+
+export function applyOperatorEnv(env, operatorEnv) {
+  for (const [key, value] of Object.entries(operatorEnv ?? {})) {
+    if (!APP_OPERATOR_ENV_KEYS.includes(key)) continue;
+    if (value == null || String(value).trim() === '') continue;
+    const current = env[key];
+    if (current != null && String(current).trim() !== '') continue;
+    env[key] = String(value).trim();
+  }
+  return env;
 }
 
 export function parseEnvFile(file) {
@@ -131,6 +165,7 @@ export function loadSeedConfig(args) {
     envPath,
     loaded: fs.existsSync(envPath),
     appRemote,
+    operatorEnv: operatorEnvFromVars(envVars),
     pr: envVars.PR?.trim() || null,
     branch: envVars.BRANCH?.trim() || null,
     clients: envVars.CLIENTS?.trim() || null,
@@ -153,7 +188,7 @@ PRs and branches are from https://github.com/covenant-gov/pacto-app
 (cloned into .cache/pacto-app on first up).
 
 Usage:
-  cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_N, ...
+  cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_N, ALCHEMY_RPC_KEY, ...
   node pacto-demo.mjs up        # launch, login/create, backup seed, profile, broadcast
   node pacto-demo.mjs up-full   # same as: up --full (DMs + squad after launch)
   node pacto-demo.mjs dm        # client 1 DMs others; they reply (clients must be up)
@@ -174,7 +209,7 @@ Options:
   --pr <n>              GitHub PR number on covenant-gov/pacto-app (mutually exclusive with --branch)
   --branch <name>       Remote branch on covenant-gov/pacto-app (mutually exclusive with --pr)
   --clients <n>         Number of desktop clients to launch (1..${MAX_CLIENTS})
-  --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N (default: .env next to this script)
+  --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N and pacto-app operator keys (default: .env next to this script)
   --seed "<phrase>"     Repeatable; overrides PACTO_DEMO_SEED_1, then _2, ...
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
   --name <name>         Squad display name (default: alpha-squad-test-<n>)

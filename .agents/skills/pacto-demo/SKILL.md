@@ -15,8 +15,11 @@ license: MIT
 
 ## Secrets
 
-- `.env`, `backups/`, `pids.json` are gitignored. Never commit or log phrases.
+- `.env`, `backups/`, `pids.json` are gitignored. Never commit or log phrases
+  or pacto-app operator secrets.
 - `PACTO_DEMO_SEED_N` → `PACTO_DEV_LOGIN_MNEMONIC`. PIN via `PACTO_DEMO_PIN` (default `123456`).
+- `ALCHEMY_RPC_KEY` / `PIMLICO_API_KEY` / other `APP_OPERATOR_ENV_KEYS` in
+  this repo's `.env` are forwarded into each client. Shell env wins.
 - After session: `get_seed` → `backups/client-<n>.txt` (0600), then `backup_verified=true`.
 
 ## MCP
