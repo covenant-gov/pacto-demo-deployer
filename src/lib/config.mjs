@@ -33,6 +33,7 @@ export const PORT_POLL_MS = 1_000;
 export const DEFAULT_ENV_FILE = path.join(DEPLOYER_DIR, '.env');
 export const SEED_ENV_RE = /^PACTO_DEMO_SEED_([1-9][0-9]*)$/;
 export const DEFAULT_DEMO_PIN = '123456';
+export const DEFAULT_APP_BRANCH = 'main';
 /** pacto-app debug secrets forwarded from this repo's `.env` into `tauri dev`. */
 export const APP_OPERATOR_ENV_KEYS = [
   'ALCHEMY_RPC_KEY',
@@ -83,6 +84,44 @@ export function parsePositiveInt(value, label) {
     throw new Error(`${label} must be an integer >= 1, got ${value}`);
   }
   return n;
+}
+
+function trimRefValue(value) {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+/** `PR=0` / `--pr 0` means pacto-app `main`, not a GitHub pull request. */
+export function isMainPrSentinel(value) {
+  return trimRefValue(value) === '0';
+}
+
+/**
+ * Resolve `--pr` / `--branch` (and `PR=` / `BRANCH=` from `.env`).
+ * `PR=0` is not a pull request: with no branch it checks out `main`.
+ */
+export function normalizeLaunchRef(args) {
+  const rawPr = trimRefValue(args?.pr);
+  const rawBranch = trimRefValue(args?.branch);
+  const prSentinel = isMainPrSentinel(rawPr);
+  const prSet = rawPr !== '' && !prSentinel;
+  const branchSet = rawBranch !== '';
+
+  if (prSet && branchSet) {
+    throw new Error('--pr and --branch are mutually exclusive (also PR= and BRANCH= in .env)');
+  }
+  if (prSet) {
+    return { pr: String(parsePositiveInt(rawPr, '--pr')), branch: null };
+  }
+  if (branchSet) {
+    return { pr: null, branch: rawBranch };
+  }
+  if (prSentinel) {
+    return { pr: null, branch: DEFAULT_APP_BRANCH };
+  }
+  throw new Error(
+    'up requires --pr <n> (0 = pacto-app main) or --branch <name> (or PR= / BRANCH= in .env)',
+  );
 }
 
 export function operatorEnvFromVars(vars) {
@@ -197,6 +236,7 @@ Usage:
   node pacto-demo.mjs squad --all
   node pacto-demo.mjs squad --join
   node pacto-demo.mjs up --pr <n> --clients <n>
+  node pacto-demo.mjs up --pr 0 --clients <n>   # pacto-app main
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
   node pacto-demo.mjs down
@@ -206,7 +246,7 @@ Usage:
   node pacto-demo.mjs wipe --all
 
 Options:
-  --pr <n>              GitHub PR number on covenant-gov/pacto-app (mutually exclusive with --branch)
+  --pr <n>              GitHub PR number on covenant-gov/pacto-app; 0 = main (mutually exclusive with --branch)
   --branch <name>       Remote branch on covenant-gov/pacto-app (mutually exclusive with --pr)
   --clients <n>         Number of desktop clients to launch (1..${MAX_CLIENTS})
   --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N and pacto-app operator keys (default: .env next to this script)
@@ -220,7 +260,7 @@ Options:
   --join                squad: accept pending invite (latest creator squad, or --name)
 
 Defaults (CLI overrides .env):
-  PR / BRANCH / CLIENTS in .env
+  PR / BRANCH / CLIENTS in .env (PR=0 → pacto-app main)
 
 Makefile:
   make up

@@ -7,7 +7,7 @@ Anyone can clone this repo, copy `.env.example` to `.env`, set `PR` / `CLIENTS` 
 ## Prerequisites
 
 - `git`
-- `gh` (authenticated) — required for `--pr`
+- `gh` (authenticated) — required for `--pr` / `PR=` when the value is a real pull request (`PR=0` uses `main` and does not need `gh`)
 - `node` and `pnpm`
 - Rust / Tauri toolchain (same as pacto-app)
 
@@ -26,6 +26,7 @@ make up                 # login, backup seed, profile, Commons user broadcast
 make up-full            # up, then DMs + squad
 make reload             # fetch latest PR/branch commits and rebuild (storage kept)
 make up PR=123 CLIENTS=3
+make up PR=0                # pacto-app main
 make up BRANCH=feat/gov-ux-improvements CLIENTS=2
 ```
 
@@ -56,7 +57,7 @@ First `up` clones [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto
 Launch target and seed phrases live in `.env` (gitignored):
 
 ```
-PR=123
+PR=0
 CLIENTS=3
 # BRANCH=feat/gov-ux-improvements
 
@@ -64,6 +65,8 @@ PACTO_DEMO_SEED_1="twelve words for the first account ..."
 PACTO_DEMO_SEED_2="twelve words for the second account ..."
 PACTO_DEMO_SEED_3="twelve words for the third account ..."
 ```
+
+`PR=0` checks out pacto-app `main`. `PR=123` is a GitHub pull request. `BRANCH=` is a remote branch name. `PR=` (>= 1) and `BRANCH=` are mutually exclusive; `PR=0` with `BRANCH=` uses the branch.
 
 `PACTO_DEMO_SEED_N` logs into client N. Clients with no matching seed start on the welcome screen. Optional `PACTO_DEMO_PIN` (default `123456`). `--seed` on the CLI overrides the numbered `.env` slot for that client.
 
@@ -115,7 +118,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 
 Runtime / gitignored:
 
-- `.env` / `.env.example` — `PR` / `CLIENTS` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
+- `.env` / `.env.example` — `PR` (`0` = pacto-app `main`) / `CLIENTS` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
 - `worktrees/<slug>/` — detached checkout of the chosen PR or branch
 - `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`)
