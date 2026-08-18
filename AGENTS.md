@@ -54,7 +54,8 @@ make status
 ```
 
 CLI flags override `.env` (`--pr`, `--branch`, `--clients`, `--pin`, `--name`).
-`--pr` / `--branch` always refer to pacto-app.
+`--pr` / `--branch` always refer to pacto-app. `PR=0` / `--pr 0` checks out
+pacto-app `main`.
 
 ## Invariants
 

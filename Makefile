@@ -8,6 +8,7 @@ help:
 
 # PR / BRANCH / CLIENTS / PIN come from .env. Override on the command line:
 # make up PR=123 CLIENTS=3
+# make up PR=0                 # pacto-app main
 # make up BRANCH=feat/gov-ux-improvements CLIENTS=2
 # make squad NAME=my-squad
 # make reload

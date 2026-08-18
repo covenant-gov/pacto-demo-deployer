@@ -8,6 +8,7 @@ import {
   MAX_CLIENTS,
   PIDS_FILE,
   loadSeedConfig,
+  normalizeLaunchRef,
   parsePositiveInt,
 } from '../lib/config.mjs';
 import { ensureAppClone, ensureWorktree, pnpmInstall, resolveRef } from '../lib/git.mjs';
@@ -62,12 +63,9 @@ export async function cmdUp(args, opts = {}) {
     throw new Error(`--clients must be <= ${MAX_CLIENTS}, got ${clients}`);
   }
 
-  if (launchArgs.pr && launchArgs.branch) {
-    throw new Error('--pr and --branch are mutually exclusive (also PR= and BRANCH= in .env)');
-  }
-  if (!launchArgs.pr && !launchArgs.branch) {
-    throw new Error('up requires --pr <n> or --branch <name> (or PR= / BRANCH= in .env)');
-  }
+  const refArgs = normalizeLaunchRef(launchArgs);
+  launchArgs.pr = refArgs.pr;
+  launchArgs.branch = refArgs.branch;
 
   for (let i = 1; i <= clients; i++) {
     identifierForClient(i);

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { APP_CACHE, WORKTREES_DIR, parsePositiveInt } from './config.mjs';
+import { APP_CACHE, WORKTREES_DIR, normalizeLaunchRef, parsePositiveInt } from './config.mjs';
 import { commandExists, log, run, slugForRef } from './process.mjs';
 
 function githubRepoSlug(remote) {
@@ -45,61 +45,54 @@ export function ensureAppClone(remote) {
 }
 
 export function resolveRef(args, appRepo, remote) {
-  if (args.pr && args.branch) {
-    throw new Error('--pr and --branch are mutually exclusive (also PR= and BRANCH= in .env)');
-  }
-  if (!args.pr && !args.branch) {
-    throw new Error('up requires --pr <n> or --branch <name> (or PR= / BRANCH= in .env)');
-  }
-
+  const { pr, branch } = normalizeLaunchRef(args);
   const repo = githubRepoSlug(remote);
 
-  if (args.pr) {
-    const pr = parsePositiveInt(args.pr, '--pr');
+  if (pr) {
+    const prNumber = parsePositiveInt(pr, '--pr');
     if (!commandExists('gh')) {
       throw new Error('gh is required for --pr (https://cli.github.com/)');
     }
     const raw = run('gh', [
       'pr',
       'view',
-      String(pr),
+      String(prNumber),
       '--repo',
       repo,
       '--json',
       'headRefOid,headRefName,url,title',
     ]);
     const prInfo = JSON.parse(raw);
-    run('git', ['fetch', 'origin', `pull/${pr}/head`], {
+    run('git', ['fetch', 'origin', `pull/${prNumber}/head`], {
       cwd: appRepo,
       stdio: ['ignore', 'inherit', 'inherit'],
     });
     const sha = prInfo.headRefOid || run('git', ['rev-parse', 'FETCH_HEAD'], { cwd: appRepo });
     return {
       kind: 'pr',
-      pr,
+      pr: prNumber,
       sha,
       name: prInfo.headRefName,
-      slug: `pr-${pr}`,
-      label: `PR #${pr} (${prInfo.headRefName})`,
+      slug: `pr-${prNumber}`,
+      label: `PR #${prNumber} (${prInfo.headRefName})`,
       url: prInfo.url,
       repo,
     };
   }
 
-  const branch = String(args.branch).trim();
-  if (!branch) throw new Error('--branch must be a non-empty name');
-  run('git', ['fetch', 'origin', branch], {
+  const name = String(branch).trim();
+  run('git', ['fetch', 'origin', name], {
     cwd: appRepo,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-  const sha = run('git', ['rev-parse', `origin/${branch}`], { cwd: appRepo });
+  const sha = run('git', ['rev-parse', `origin/${name}`], { cwd: appRepo });
   return {
     kind: 'branch',
-    branch,
+    branch: name,
     sha,
-    name: branch,
-    slug: slugForRef(branch),
-    label: `${repo}@${branch}`,
+    name,
+    slug: slugForRef(name),
+    label: `${repo}@${name}`,
     repo,
   };
 }
