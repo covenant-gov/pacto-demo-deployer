@@ -82,7 +82,7 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `up-full` | `up`, then `dm`, then `squad` |
 | `reload` | Same launch path as `up` after updating the pacto-app worktree |
 | `dm` | Client 1 DMs the others; they reply. Requires a live session |
-| `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `alpha-squad-test-<n>` |
+| `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |
 | `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
 | `status` / `down` / `wipe` | Inspect, stop (after retracting Commons user and squad broadcasts), or delete `io.pacto.demo.<n>` storage |
 

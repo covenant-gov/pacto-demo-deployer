@@ -45,7 +45,7 @@ export const APP_OPERATOR_ENV_KEYS = [
   'PACTO_TRUSTED_RELAYS',
   'KLIPY_API_KEY',
 ];
-export const DEMO_SQUAD_NAME_PREFIX = 'alpha-squad-test';
+export const DEMO_SQUAD_NAME_PREFIX = 'squad-test';
 export const DEMO_SQUAD_NETWORK = 'sepolia';
 export const DEMO_SQUAD_TAGS = ['test', 'demo', 'alpha'];
 export const NATO_WORDS = [
@@ -252,7 +252,7 @@ Options:
   --env <path>          Env file with PR/CLIENTS/PACTO_DEMO_SEED_N and pacto-app operator keys (default: .env next to this script)
   --seed "<phrase>"     Repeatable; overrides PACTO_DEMO_SEED_1, then _2, ...
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
-  --name <name>         Squad display name (default: alpha-squad-test-<n>)
+  --name <name>         Squad display name (default: squad-test-<n>)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
   --full                After up: also run DMs and squad (client 1 invites client 2)
