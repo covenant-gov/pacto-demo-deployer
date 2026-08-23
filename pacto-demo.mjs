@@ -29,6 +29,7 @@ function parseArgs(argv) {
     all: false,
     wipe: false,
     full: false,
+    light: false,
     join: false,
     name: null,
   };
@@ -94,6 +95,9 @@ function parseArgs(argv) {
       case '--full':
         out.full = true;
         break;
+      case '--light':
+        out.light = true;
+        break;
       case '--wipe':
         out.wipe = true;
         break;
@@ -126,8 +130,12 @@ async function main() {
         break;
       case 'up':
       case 'up-full':
+      case 'up-light':
       case 'reload':
-        await cmdUp(args, { full: args.command === 'up-full' || args.full });
+        await cmdUp(args, {
+          full: args.command === 'up-full' || args.full,
+          light: args.command === 'up-light' || args.light,
+        });
         break;
       case 'dm':
         await cmdDm(args);

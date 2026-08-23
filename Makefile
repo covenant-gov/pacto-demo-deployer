@@ -1,7 +1,7 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-.PHONY: help up up-full dm squad squad-all squad-join reload down down-wipe status wipe wipe-all
+.PHONY: help up up-full up-light dm squad squad-all squad-join reload down down-wipe status wipe wipe-all
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -37,6 +37,9 @@ up:
 
 up-full:
 	$(NODE) $(SCRIPT) up --full $(LAUNCH_FLAGS)
+
+up-light:
+	$(NODE) $(SCRIPT) up --light $(LAUNCH_FLAGS)
 
 dm:
 	$(NODE) $(SCRIPT) dm $(LAUNCH_FLAGS)

@@ -18,7 +18,7 @@ Sources: [pacto-app](https://github.com/covenant-gov/pacto-app) contributor docs
 
 | Id | Make | CLIENTS | Verify |
 | --- | --- | --- | --- |
-| `broadcast` | `make up` | 1+ | Commons shows each client's user card |
+| `broadcast` | `make up-light` | 1+ | Commons shows each client's user card |
 | `dm` | `make dm` | 2+ | alpha→others hello; replies |
 | `squad` | `make squad` | 2 | `alpha-squad-test-<n>` on both; bravo Accept |
 | `squad` + `--join` | `make squad-join` | 2 | Accept pending invite without creating another squad |

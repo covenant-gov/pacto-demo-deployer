@@ -30,7 +30,7 @@ license: MIT
 ## Names and commands
 
 - Client 1 `alpha-test`, client 2 `bravo-test` (`demoNameForIndex`).
-- `make up` = launch + session + Commons user broadcast.
+- `make up` = launch + session. `make up-light` = `up` + Commons user broadcast.
   `PR=0` / `--pr 0` checks out pacto-app `main`.
 - `make down` retracts user and catalog-squad Commons broadcasts before stop.
 - `make dm` / `make squad` require live `pids.json`.

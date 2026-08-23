@@ -228,8 +228,9 @@ PRs and branches are from https://github.com/covenant-gov/pacto-app
 
 Usage:
   cp .env.example .env          # then set PR, CLIENTS, PACTO_DEMO_SEED_N, ALCHEMY_RPC_KEY, ...
-  node pacto-demo.mjs up        # launch, login/create, backup seed, profile, broadcast
-  node pacto-demo.mjs up-full   # same as: up --full (DMs + squad after launch)
+  node pacto-demo.mjs up        # launch, login/create, backup seed, profile
+  node pacto-demo.mjs up-light  # same as: up --light (Commons user broadcast after launch)
+  node pacto-demo.mjs up-full   # same as: up --full (broadcast, DMs + squad after launch)
   node pacto-demo.mjs dm        # client 1 DMs others; they reply (clients must be up)
   node pacto-demo.mjs squad     # create, invite, bravo accepts (Sepolia, Commons #test)
   node pacto-demo.mjs squad --name my-squad
@@ -255,7 +256,8 @@ Options:
   --name <name>         Squad display name (default: squad-test-<n>)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
   --client <n>          Wipe storage for io.pacto.demo.<n> only
-  --full                After up: also run DMs and squad (client 1 invites client 2)
+  --light               After up: also run Commons user broadcast
+  --full                After up: also run broadcast, DMs and squad (client 1 invites client 2)
   --all                 wipe: every demo storage dir; squad: invite all other live clients
   --join                squad: accept pending invite (latest creator squad, or --name)
 
@@ -264,6 +266,7 @@ Defaults (CLI overrides .env):
 
 Makefile:
   make up
+  make up-light
   make up-full
   make dm
   make squad

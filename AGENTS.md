@@ -28,7 +28,7 @@ explicitly asks.
 
 - `pacto-demo.mjs` — CLI entry (`parseArgs`, command switch). Makefile target.
 - `src/lib/` — config, process/isolation, git/worktree, MCP, session, launch.
-- `src/commands/` — `up` / `reload` / `up-full` and lifecycle (`down`, `status`, `wipe`).
+- `src/commands/` — `up` / `reload` / `up-light` / `up-full` and lifecycle (`down`, `status`, `wipe`).
 - `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`). Add a
   module and one registry row for a new branch test.
 - `.agents/skills/` — CE loop plus `pacto-demo`.
@@ -39,8 +39,9 @@ explicitly asks.
 ## Commands
 
 ```bash
-make up              # launch, login/create, backup seed, profile, Commons user broadcast
-make up-full         # up + DMs + squad (client 1 invites client 2; invitee accepts)
+make up              # launch, login/create, backup seed, profile
+make up-light        # up + Commons user broadcast
+make up-full         # up-light + DMs + squad (client 1 invites client 2; invitee accepts)
 make dm
 make squad
 make squad NAME=my-squad

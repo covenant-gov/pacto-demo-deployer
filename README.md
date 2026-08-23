@@ -22,8 +22,9 @@ cp .env.example .env    # then set PR, CLIENTS, PACTO_DEMO_SEED_N, and ALCHEMY_R
 Launch (CLI flags override `.env`):
 
 ```bash
-make up                 # login, backup seed, profile, Commons user broadcast
-make up-full            # up, then DMs + squad
+make up                 # login, backup seed, profile
+make up-light           # up, then Commons user broadcast
+make up-full            # up-light, then DMs + squad
 make reload             # fetch latest PR/branch commits and rebuild (storage kept)
 make up PR=123 CLIENTS=3
 make up PR=0                # pacto-app main
@@ -50,7 +51,7 @@ make wipe CLIENT=1
 make wipe-all
 ```
 
-Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--full`, `--all`, `--join`, `--name`, `--wipe`). `make help` prints the full list.
+Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--light`, `--full`, `--all`, `--join`, `--name`, `--wipe`). `make help` prints the full list.
 
 First `up` clones [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) into `.cache/pacto-app`. Override the remote with `PACTO_APP_REMOTE` in `.env`.
 
@@ -78,8 +79,9 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 
 | Command | What it does |
 | --- | --- |
-| `up` | Launch clients, login/create, write `backups/client-<n>.txt`, set demo names (`alpha-test`, `bravo-test`, …), Commons user broadcast |
-| `up-full` | `up`, then `dm`, then `squad` |
+| `up` | Launch clients, login/create, write `backups/client-<n>.txt`, set demo names (`alpha-test`, `bravo-test`, …) |
+| `up-light` | `up`, then Commons user broadcast |
+| `up-full` | `up-light`, then `dm`, then `squad` |
 | `reload` | Same launch path as `up` after updating the pacto-app worktree |
 | `dm` | Client 1 DMs the others; they reply. Requires a live session |
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |
@@ -110,7 +112,7 @@ Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `P
 CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 
 - `src/lib/` — config, isolation/ports, dev-port claims, git worktree, MCP, session, launch
-- `src/commands/` — `up` / `reload` / `up-full` and lifecycle (`down`, `status`, `wipe`)
+- `src/commands/` — `up` / `reload` / `up-light` / `up-full` and lifecycle (`down`, `status`, `wipe`)
 - `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module and one row in [`src/scenarios/index.mjs`](src/scenarios/index.mjs) for a new branch test
 - Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
 - `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo

@@ -36,7 +36,15 @@ import { cmdDown } from './lifecycle.mjs';
 
 export async function cmdUp(args, opts = {}) {
   const full = Boolean(opts.full) || Boolean(args.full) || args.command === 'up-full';
-  log(full ? 'mode: up-full (login, broadcast, DMs, squad)' : 'mode: up (login, broadcast)');
+  const light = Boolean(opts.light) || Boolean(args.light) || args.command === 'up-light';
+  const doBroadcast = full || light;
+  log(
+    full
+      ? 'mode: up-full (login, broadcast, DMs, squad)'
+      : light
+        ? 'mode: up-light (login, broadcast)'
+        : 'mode: up (login)',
+  );
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
   const launchArgs = {
@@ -165,7 +173,9 @@ export async function cmdUp(args, opts = {}) {
   }
 
   const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
-  await runScenario('broadcast', { clients: state.clients, pin: sessionPin });
+  if (doBroadcast) {
+    await runScenario('broadcast', { clients: state.clients, pin: sessionPin });
+  }
   if (full) {
     log('up-full: DMs + squad');
     await runScenario('dm', { clients: state.clients, pin: sessionPin });
