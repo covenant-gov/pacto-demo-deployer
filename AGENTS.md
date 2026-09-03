@@ -75,6 +75,8 @@ pacto-app `main`.
   dir exceeds 12 GiB, when pruning unused client indexes, or via
   `clean-targets`. This is separate from app-data `wipe` / `down --wipe`.
   Never confuse either with `io.pacto`.
+- Worktrees under `worktrees/` keep only `main` and the active PR/branch slug;
+  switching PR/branch removes prior checkouts.
 - MCP: `ws://127.0.0.1:<mcpBridge>` → `execute_js` → `window.__TAURI__.core.invoke`.
 - Unseeded clients land on **Enter your PIN** after webview reload; paste the
   demo PIN onto unlock digits only (not Create/Confirm).

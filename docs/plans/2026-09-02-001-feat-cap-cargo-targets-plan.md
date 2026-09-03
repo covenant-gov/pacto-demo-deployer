@@ -17,6 +17,8 @@ filling the laptop disk.
 - `clean-targets` / `make clean-targets` for a manual full wipe (not app-data).
 - `status` reports per-client and total cargo target sizes.
 - Ordinary `down` does not wipe cargo targets (same-SHA relaunch stays fast).
+- `worktrees/` keeps only `main` and the active PR/branch slug; prior PR
+  checkouts are removed via `pruneStaleWorktrees` after each `ensureWorktree`.
 
 ## Files
 

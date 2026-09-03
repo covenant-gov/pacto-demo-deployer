@@ -270,6 +270,7 @@ Defaults (CLI overrides .env):
 Notes:
   up/reload wipe cargo targets/<n> when the pacto-app SHA changes, when a client
   dir exceeds 12 GiB, or when pruning unused client indexes. App-data wipe is separate.
+  up/reload also prune worktrees/ to only main + the active PR/branch slug.
 
 Makefile:
   make up

@@ -20,3 +20,7 @@ run `make clean-targets` anytime. `status` prints cargo target disk use.
 
 App-data wipe (`wipe` / `down --wipe`) and cargo-target wipe (`clean-targets` /
 SHA-change / budget) are separate. Never confuse either with `io.pacto`.
+
+Worktrees under `worktrees/` keep only `main` and the active PR/branch slug;
+`pruneStaleWorktrees` runs after each `ensureWorktree` so switching PRs does
+not leave prior checkouts on disk.

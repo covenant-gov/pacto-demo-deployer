@@ -133,7 +133,7 @@ Runtime / gitignored:
 
 - `.env` / `.env.example` — `PR` (`0` = pacto-app `main`) / `CLIENTS` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
-- `worktrees/<slug>/` — detached checkout of the chosen PR or branch
+- `worktrees/<slug>/` — detached checkout of the chosen PR or branch. Only `main` and the active PR/branch slug are kept; prior PR/branch dirs are removed on `up` / `reload`.
 - `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`). Bounded by SHA-change / 12 GiB cap / orphan prune / `clean-targets`.
 - `logs/client-<n>.log` — `tauri dev` output
 - `pids.json` — running client PIDs for `down` / `status` / scenarios
