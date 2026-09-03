@@ -11,7 +11,7 @@
 import { usageText } from './src/lib/config.mjs';
 import { fail, log } from './src/lib/process.mjs';
 import { cmdUp } from './src/commands/up.mjs';
-import { cmdDown, cmdStatus, cmdWipe } from './src/commands/lifecycle.mjs';
+import { cmdDown, cmdStatus, cmdWipe, cmdCleanTargets } from './src/commands/lifecycle.mjs';
 import { cmdDm, cmdSquad } from './src/scenarios/index.mjs';
 
 const USAGE = usageText();
@@ -151,6 +151,9 @@ async function main() {
         break;
       case 'wipe':
         cmdWipe(args);
+        break;
+      case 'clean-targets':
+        cmdCleanTargets();
         break;
       default:
         throw new Error(`unknown command '${args.command}'`);

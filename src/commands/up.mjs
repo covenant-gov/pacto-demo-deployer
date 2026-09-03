@@ -31,6 +31,7 @@ import {
 } from '../lib/process.mjs';
 import { assertClaimFree, claimForClient } from '../lib/claims.mjs';
 import { demoNameForIndex, setupDemoName } from '../lib/session.mjs';
+import { ensureCargoTargetsBudget, pruneOrphanTargetDirs } from '../lib/targets.mjs';
 import { runScenario } from '../scenarios/index.mjs';
 import { cmdDown } from './lifecycle.mjs';
 
@@ -106,6 +107,13 @@ export async function cmdUp(args, opts = {}) {
   }
   const worktreePath = ensureWorktree(ref, appRepo);
   pnpmInstall(worktreePath);
+
+  ensureCargoTargetsBudget({
+    clients,
+    previousSha,
+    nextSha: ref.sha,
+  });
+  pruneOrphanTargetDirs(clients);
 
   const windowTemplate = readWindowTemplate(worktreePath);
   const state = {

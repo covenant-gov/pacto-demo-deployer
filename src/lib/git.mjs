@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { APP_CACHE, WORKTREES_DIR, normalizeLaunchRef, parsePositiveInt } from './config.mjs';
+import {
+  APP_CACHE,
+  DEFAULT_APP_BRANCH,
+  WORKTREES_DIR,
+  normalizeLaunchRef,
+  parsePositiveInt,
+} from './config.mjs';
 import { commandExists, log, run, slugForRef } from './process.mjs';
 
 function githubRepoSlug(remote) {
@@ -112,6 +118,7 @@ export function ensureWorktree(ref, appRepo) {
     });
     run('git', ['reset', '--hard', ref.sha], { cwd: worktreePath });
     run('git', ['clean', '-fd', '-e', 'node_modules', '-e', 'src-tauri/target'], { cwd: worktreePath });
+    pruneStaleWorktrees(ref, appRepo);
     return worktreePath;
   }
 
@@ -124,7 +131,65 @@ export function ensureWorktree(ref, appRepo) {
     cwd: appRepo,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
+  pruneStaleWorktrees(ref, appRepo);
   return worktreePath;
+}
+
+/** Slugs that must remain under worktrees/: main + the active PR/branch. */
+export function keptWorktreeSlugs(ref) {
+  const keep = new Set([slugForRef(DEFAULT_APP_BRANCH)]);
+  if (ref?.slug) keep.add(String(ref.slug));
+  return keep;
+}
+
+export function listWorktreeDirs(worktreesDir = WORKTREES_DIR) {
+  if (!fs.existsSync(worktreesDir)) return [];
+  return fs
+    .readdirSync(worktreesDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => ({
+      slug: entry.name,
+      path: path.join(worktreesDir, entry.name),
+    }))
+    .sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+function defaultRemoveWorktree(dir, appRepo) {
+  if (appRepo) {
+    try {
+      run('git', ['worktree', 'remove', '--force', dir], { cwd: appRepo });
+      return;
+    } catch {
+      // Fall through: path may already be unregistered or half-deleted.
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/**
+ * Keep only `main` and the active ref slug under worktrees/.
+ * Previous PR/branch checkouts are removed so disk does not accumulate.
+ */
+export function pruneStaleWorktrees(ref, appRepo, {
+  worktreesDir = WORKTREES_DIR,
+  removeWorktree = defaultRemoveWorktree,
+} = {}) {
+  const keep = keptWorktreeSlugs(ref);
+  const removed = [];
+  for (const entry of listWorktreeDirs(worktreesDir)) {
+    if (keep.has(entry.slug)) continue;
+    log(`removing stale worktree ${entry.path} (keeping ${[...keep].join(', ')})`);
+    removeWorktree(entry.path, appRepo);
+    removed.push(entry.slug);
+  }
+  if (appRepo) {
+    try {
+      run('git', ['worktree', 'prune'], { cwd: appRepo });
+    } catch {
+      // Best-effort cleanup of already-gone registrations.
+    }
+  }
+  return removed;
 }
 
 export function pnpmInstall(worktreePath) {

@@ -4,6 +4,7 @@ import {
   IDENTIFIER_RE,
   PIDS_FILE,
   STOP_GRACE_MS,
+  TARGETS_DIR,
   parsePositiveInt,
 } from '../lib/config.mjs';
 import {
@@ -19,6 +20,12 @@ import {
   wipeDir,
 } from '../lib/process.mjs';
 import { releaseClaimForClient } from '../lib/claims.mjs';
+import {
+  dirSizeBytes,
+  formatBytes,
+  listTargetClientDirs,
+  wipeAllTargets,
+} from '../lib/targets.mjs';
 import { cancelDemoBroadcast } from '../scenarios/index.mjs';
 
 async function stopClients(state, { quiet = false } = {}) {
@@ -86,18 +93,37 @@ export function cmdStatus() {
   const root = appDataRoot();
   if (!fs.existsSync(root)) {
     log(`  (no app-data root at ${root})`);
+  } else {
+    const dirs = fs.readdirSync(root).filter(name => IDENTIFIER_RE.test(name)).sort((a, b) => {
+      return Number(a.slice('io.pacto.demo.'.length)) - Number(b.slice('io.pacto.demo.'.length));
+    });
+    if (dirs.length === 0) {
+      log('  (no io.pacto.demo.<n> directories)');
+    } else {
+      for (const name of dirs) {
+        log(`  ${path.join(root, name)}`);
+      }
+    }
+  }
+
+  log('cargo targets:');
+  const targetDirs = listTargetClientDirs();
+  if (targetDirs.length === 0) {
+    log(`  (none under ${TARGETS_DIR})`);
     return;
   }
-  const dirs = fs.readdirSync(root).filter(name => IDENTIFIER_RE.test(name)).sort((a, b) => {
-    return Number(a.slice('io.pacto.demo.'.length)) - Number(b.slice('io.pacto.demo.'.length));
-  });
-  if (dirs.length === 0) {
-    log('  (no io.pacto.demo.<n> directories)');
-    return;
+  let total = 0;
+  for (const entry of targetDirs) {
+    const size = dirSizeBytes(entry.path);
+    total += size;
+    log(`  client ${entry.index}: ${formatBytes(size)}  ${entry.path}`);
   }
-  for (const name of dirs) {
-    log(`  ${path.join(root, name)}`);
-  }
+  log(`  total: ${formatBytes(total)}`);
+}
+
+export function cmdCleanTargets() {
+  wipeAllTargets();
+  log(`cargo targets cleaned under ${TARGETS_DIR}`);
 }
 
 export function cmdWipe(args) {

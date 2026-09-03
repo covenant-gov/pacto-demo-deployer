@@ -9,6 +9,8 @@ export const DEFAULT_APP_REMOTE = 'https://github.com/covenant-gov/pacto-app.git
 
 export const WORKTREES_DIR = path.join(DEPLOYER_DIR, 'worktrees');
 export const TARGETS_DIR = path.join(DEPLOYER_DIR, 'targets');
+/** Per-client CARGO_TARGET_DIR hard cap before up/reload wipes that dir. */
+export const MAX_TARGET_DIR_BYTES = 12 * 1024 * 1024 * 1024;
 export const LOGS_DIR = path.join(DEPLOYER_DIR, 'logs');
 export const BACKUPS_DIR = path.join(DEPLOYER_DIR, 'backups');
 export const PIDS_FILE = path.join(DEPLOYER_DIR, 'pids.json');
@@ -245,6 +247,7 @@ Usage:
   node pacto-demo.mjs status
   node pacto-demo.mjs wipe --client <n>
   node pacto-demo.mjs wipe --all
+  node pacto-demo.mjs clean-targets   # delete targets/<n> cargo artifacts (not app-data)
 
 Options:
   --pr <n>              GitHub PR number on covenant-gov/pacto-app; 0 = main (mutually exclusive with --branch)
@@ -264,6 +267,11 @@ Options:
 Defaults (CLI overrides .env):
   PR / BRANCH / CLIENTS in .env (PR=0 → pacto-app main)
 
+Notes:
+  up/reload wipe cargo targets/<n> when the pacto-app SHA changes, when a client
+  dir exceeds 12 GiB, or when pruning unused client indexes. App-data wipe is separate.
+  up/reload also prune worktrees/ to only main + the active PR/branch slug.
+
 Makefile:
   make up
   make up-light
@@ -278,5 +286,6 @@ Makefile:
   make down-wipe
   make wipe CLIENT=1
   make wipe-all
+  make clean-targets
 `;
 }
