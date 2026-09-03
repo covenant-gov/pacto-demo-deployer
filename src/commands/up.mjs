@@ -39,6 +39,29 @@ function liveSiblings(existing, index) {
   return (existing?.clients ?? []).filter(c => c.index !== index && isAlive(c.pid));
 }
 
+/** Resolve launch mode from CLI command / opts. Exported for unit tests. */
+export function resolveUpMode(args = {}, opts = {}) {
+  const command = args.command ?? '';
+  const onlyClient =
+    Boolean(opts.onlyClient) ||
+    command === 'up-client' ||
+    command === 'up-simple-client' ||
+    command === 'reload-client';
+  const simple =
+    Boolean(opts.simple) || command === 'up-simple' || command === 'up-simple-client';
+  const full =
+    !onlyClient && !simple && (Boolean(opts.full) || Boolean(args.full) || command === 'up-full');
+  // up-client stays light; reload-client is session-only (like reload/up).
+  const light =
+    (!simple && onlyClient && command === 'up-client') ||
+    Boolean(opts.light) ||
+    Boolean(args.light) ||
+    command === 'up-light';
+  const doSession = !simple;
+  const doBroadcast = !simple && (full || light);
+  return { onlyClient, simple, full, light, doSession, doBroadcast };
+}
+
 async function spawnOneClient({
   index,
   worktreePath,
@@ -46,6 +69,7 @@ async function spawnOneClient({
   seedConfig,
   pin,
   state,
+  doSession = true,
 }) {
   const identifier = identifierForClient(index);
   const ports = portsForIndex(index);
@@ -94,23 +118,21 @@ async function spawnOneClient({
 
   log(`  pid ${pid}, waiting for compile (log: ${logPath})`);
   await waitUntilReady({ pid, ports, logPath, timeoutMs: DEFAULT_READY_TIMEOUT_MS });
-  const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
   const launched = state.clients.find(c => c.index === index) ?? row;
-  try {
-    await setupDemoName(launched, sessionPin);
-  } catch (err) {
-    log(`  client ${index}: name/session failed: ${err.message}`);
+  if (doSession) {
+    const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
+    try {
+      await setupDemoName(launched, sessionPin);
+    } catch (err) {
+      log(`  client ${index}: name/session failed: ${err.message}`);
+    }
+    writePidsFile(state);
   }
-  writePidsFile(state);
   return launched;
 }
 
 export async function cmdUp(args, opts = {}) {
-  const onlyClient = Boolean(opts.onlyClient) || args.command === 'up-client';
-  const full = !onlyClient && (Boolean(opts.full) || Boolean(args.full) || args.command === 'up-full');
-  const light =
-    onlyClient || Boolean(opts.light) || Boolean(args.light) || args.command === 'up-light';
-  const doBroadcast = full || light;
+  const { onlyClient, simple, full, light, doSession, doBroadcast } = resolveUpMode(args, opts);
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
   const launchArgs = {
@@ -127,7 +149,7 @@ export async function cmdUp(args, opts = {}) {
       envValue: seedConfig.client,
       cliLabel: '--client',
       envLabel: 'CLIENT',
-      error: 'up-client requires --client <n> or CLIENT in .env',
+      error: `${args.command || 'up-client'} requires --client <n> or CLIENT in .env`,
     });
     indexes = launchIndexes({ onlyClient: n });
   } else {
@@ -135,13 +157,19 @@ export async function cmdUp(args, opts = {}) {
   }
 
   log(
-    onlyClient
-      ? `mode: up-client (login, broadcast) client ${indexes[0]}`
-      : full
-        ? 'mode: up-full (login, broadcast, DMs, squad)'
-        : light
-          ? 'mode: up-light (login, broadcast)'
-          : 'mode: up (login)',
+    onlyClient && simple
+      ? `mode: up-simple-client (spawn only) client ${indexes[0]}`
+      : onlyClient && light
+        ? `mode: up-client (login, broadcast) client ${indexes[0]}`
+        : onlyClient
+          ? `mode: reload-client (login) client ${indexes[0]}`
+          : simple
+            ? 'mode: up-simple (spawn only)'
+            : full
+              ? 'mode: up-full (login, broadcast, DMs, squad)'
+              : light
+                ? 'mode: up-light (login, broadcast)'
+                : 'mode: up (login)',
   );
   if (seedConfig.loaded) {
     log(`seeds: ${seedConfig.envPath} (${seedConfig.byIndex.size} phrase(s))`);
@@ -195,7 +223,7 @@ export async function cmdUp(args, opts = {}) {
     const requested = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
     if (existing.ref?.sha && requested.sha !== existing.ref.sha) {
       throw new Error(
-        `up-client refuses to switch pacto-app (` +
+        `single-client launch refuses to switch pacto-app (` +
           `${String(existing.ref.sha).slice(0, 12)} → ${String(requested.sha).slice(0, 12)}) ` +
           `while other clients are running. Stop them first, or match the live checkout.`,
       );
@@ -255,6 +283,7 @@ export async function cmdUp(args, opts = {}) {
         seedConfig,
         pin,
         state,
+        doSession,
       }),
     );
   }

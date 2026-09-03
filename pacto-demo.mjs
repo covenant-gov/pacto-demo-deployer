@@ -131,12 +131,19 @@ async function main() {
       case 'up':
       case 'up-full':
       case 'up-light':
+      case 'up-simple':
       case 'up-client':
+      case 'up-simple-client':
       case 'reload':
+      case 'reload-client':
         await cmdUp(args, {
           full: args.command === 'up-full' || args.full,
           light: args.command === 'up-light' || args.light,
-          onlyClient: args.command === 'up-client',
+          onlyClient:
+            args.command === 'up-client' ||
+            args.command === 'up-simple-client' ||
+            args.command === 'reload-client',
+          simple: args.command === 'up-simple' || args.command === 'up-simple-client',
         });
         break;
       case 'logs':

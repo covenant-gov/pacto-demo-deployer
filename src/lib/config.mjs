@@ -285,7 +285,10 @@ Usage:
   node pacto-demo.mjs up --pr 0 --clients <n>   # pacto-app main
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
+  node pacto-demo.mjs reload-client # same as reload for one CLIENT / --client
+  node pacto-demo.mjs up-simple # spawn clients only (no MCP session / scenarios)
   node pacto-demo.mjs up-client # up-light for one CLIENT / --client (other clients untouched)
+  node pacto-demo.mjs up-simple-client # spawn only for one CLIENT / --client
   node pacto-demo.mjs logs      # follow logs/client-<n>.log (LOG_CLIENT / --client)
   node pacto-demo.mjs down
   node pacto-demo.mjs down --wipe
@@ -303,7 +306,7 @@ Options:
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
   --name <name>         Squad display name (default: squad-test-<n>)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
-  --client <n>          wipe / logs / up-client: io.pacto.demo.<n> only
+  --client <n>          wipe / logs / up-client / up-simple-client / reload-client: io.pacto.demo.<n> only
   --light               After up: also run Commons user broadcast
   --full                After up: also run broadcast, DMs and squad (client 1 invites client 2)
   --all                 wipe: every demo storage dir; squad: invite all other live clients
@@ -327,7 +330,10 @@ Makefile:
   make squad-all
   make squad-join
   make reload
+  make reload-client        # CLIENT= in .env or make reload-client CLIENT=2
+  make up-simple
   make up-client            # CLIENT= in .env or make up-client CLIENT=2
+  make up-simple-client     # CLIENT= in .env or make up-simple-client CLIENT=2
   make logs                 # LOG_CLIENT= in .env or make logs LOG_CLIENT=2
   make down
   make down-wipe
