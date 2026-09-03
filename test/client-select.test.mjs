@@ -13,6 +13,7 @@ import {
 } from '../src/lib/config.mjs';
 import { mergeClientRow } from '../src/lib/process.mjs';
 import { cmdLogs } from '../src/commands/lifecycle.mjs';
+import { resolveUpMode } from '../src/commands/up.mjs';
 
 function writeEnv(body) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pacto-demo-env-'));
@@ -127,4 +128,47 @@ test('cmdLogs follows logs/client-<n>.log via tail -F', async () => {
   } finally {
     fs.rmSync(logPath, { force: true });
   }
+});
+
+test('resolveUpMode maps simple and reload-client correctly', () => {
+  assert.deepEqual(resolveUpMode({ command: 'up-simple' }), {
+    onlyClient: false,
+    simple: true,
+    full: false,
+    light: false,
+    doSession: false,
+    doBroadcast: false,
+  });
+  assert.deepEqual(resolveUpMode({ command: 'up-simple-client' }), {
+    onlyClient: true,
+    simple: true,
+    full: false,
+    light: false,
+    doSession: false,
+    doBroadcast: false,
+  });
+  assert.deepEqual(resolveUpMode({ command: 'reload-client' }), {
+    onlyClient: true,
+    simple: false,
+    full: false,
+    light: false,
+    doSession: true,
+    doBroadcast: false,
+  });
+  assert.deepEqual(resolveUpMode({ command: 'up-client' }), {
+    onlyClient: true,
+    simple: false,
+    full: false,
+    light: true,
+    doSession: true,
+    doBroadcast: true,
+  });
+  assert.deepEqual(resolveUpMode({ command: 'reload' }), {
+    onlyClient: false,
+    simple: false,
+    full: false,
+    light: false,
+    doSession: true,
+    doBroadcast: false,
+  });
 });

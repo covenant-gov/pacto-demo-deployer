@@ -42,7 +42,9 @@ explicitly asks.
 make up              # launch, login/create, backup seed, profile
 make up-light        # up + Commons user broadcast
 make up-full         # up-light + DMs + squad (client 1 invites client 2; invitee accepts)
+make up-simple       # spawn clients only (no MCP session / scenarios)
 make up-client       # up-light for CLIENT / --client only (other clients untouched)
+make up-simple-client # spawn only for CLIENT / --client
 make logs            # follow logs/client-<n>.log (LOG_CLIENT / --client)
 make dm
 make squad
@@ -50,6 +52,7 @@ make squad NAME=my-squad
 make squad-all
 make squad-join      # accept pending invite (latest creator squad, or NAME=)
 make reload
+make reload-client   # reload for CLIENT / --client only (other clients untouched)
 make down
 make down-wipe
 make wipe CLIENT=1

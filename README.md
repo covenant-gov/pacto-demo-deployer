@@ -25,11 +25,14 @@ Launch (CLI flags override `.env`):
 make up                 # login, backup seed, profile
 make up-light           # up, then Commons user broadcast
 make up-full            # up-light, then DMs + squad
+make up-simple          # spawn only (no MCP session / scenarios)
 make reload             # fetch latest PR/branch commits and rebuild (storage kept)
+make reload-client CLIENT=2  # reload one client only (siblings untouched)
 make up PR=123 CLIENTS=3
 make up PR=0                # pacto-app main
 make up BRANCH=feat/gov-ux-improvements CLIENTS=2
 make up-client CLIENT=2     # up-light for client 2 only (PACTO_DEMO_SEED_2; client 1 untouched)
+make up-simple-client CLIENT=2  # spawn client 2 only
 make logs LOG_CLIENT=2      # follow logs/client-2.log
 ```
 
@@ -79,7 +82,9 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 
 pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`, and the other names in pacto-app's [`.env.example`](https://github.com/covenant-gov/pacto-app/blob/main/.env.example)) also live in this repo's `.env`. `up` / `reload` forward the allowlisted keys into each `tauri dev` process. A variable already set in the shell wins. Values are never logged.
 
-`reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept.
+`reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept. `reload-client` does the same for one `CLIENT` index only (siblings stay up; SHA switch refused while they run).
+
+`up-simple` / `up-simple-client` spawn windows and wait until ready, still forwarding seeds/PIN/operator env, but skip deployer MCP (no `setupDemoName`, broadcast, dm, or squad).
 
 `up-client` starts only `io.pacto.demo.<n>` (`PACTO_DEMO_SEED_N`). It does not stop sibling clients, does not create other indexes' app-data, and does not prune `targets/<m>` for other clients. If other demo clients are already running, it reuses their pacto-app worktree and refuses a SHA switch.
 
@@ -90,9 +95,12 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `up` | Launch clients, login/create, write `backups/client-<n>.txt`, set demo names (`alpha-test`, `bravo-test`, …) |
 | `up-light` | `up`, then Commons user broadcast |
 | `up-full` | `up-light`, then `dm`, then `squad` |
+| `up-simple` | Spawn clients only (seed/PIN env still set; no MCP session / scenarios) |
 | `up-client` | `up-light` for one index (`CLIENT` / `--client`, seed `PACTO_DEMO_SEED_N`). Leaves other clients and their storage alone |
+| `up-simple-client` | Spawn-only single index (`CLIENT` / `--client`) |
 | `logs` | Follow `logs/client-<n>.log` (`LOG_CLIENT` / `--client`) |
 | `reload` | Same launch path as `up` after updating the pacto-app worktree |
+| `reload-client` | Same as `reload` for one index (`CLIENT` / `--client`); siblings untouched |
 | `dm` | Client 1 DMs the others; they reply. Requires a live session |
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |
 | `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
@@ -136,6 +144,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 - Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
 - Cargo targets plan: [`docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md`](docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md)
 - Logs / up-client: [`docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md`](docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md)
+- up-simple / reload-client: [`docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md`](docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md)
 - `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo
 - `docs/plans/` / `docs/solutions/` — accepted plans and compounded learnings
 

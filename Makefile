@@ -1,7 +1,7 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-.PHONY: help up up-full up-light up-client dm squad squad-all squad-join reload logs down down-wipe status wipe wipe-all clean-targets
+.PHONY: help up up-full up-light up-simple up-client up-simple-client dm squad squad-all squad-join reload reload-client logs down down-wipe status wipe wipe-all clean-targets
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -41,12 +41,23 @@ up-full:
 up-light:
 	$(NODE) $(SCRIPT) up --light $(LAUNCH_FLAGS)
 
+up-simple:
+	$(NODE) $(SCRIPT) up-simple $(LAUNCH_FLAGS)
+
 # make up-client CLIENT=2  (or CLIENT= in .env)
 up-client:
 ifdef CLIENT
 	$(NODE) $(SCRIPT) up-client $(LAUNCH_FLAGS) --client $(CLIENT)
 else
 	$(NODE) $(SCRIPT) up-client $(LAUNCH_FLAGS)
+endif
+
+# make up-simple-client CLIENT=2  (or CLIENT= in .env)
+up-simple-client:
+ifdef CLIENT
+	$(NODE) $(SCRIPT) up-simple-client $(LAUNCH_FLAGS) --client $(CLIENT)
+else
+	$(NODE) $(SCRIPT) up-simple-client $(LAUNCH_FLAGS)
 endif
 
 dm:
@@ -63,6 +74,14 @@ squad-join:
 
 reload:
 	$(NODE) $(SCRIPT) reload $(LAUNCH_FLAGS)
+
+# make reload-client CLIENT=2  (or CLIENT= in .env)
+reload-client:
+ifdef CLIENT
+	$(NODE) $(SCRIPT) reload-client $(LAUNCH_FLAGS) --client $(CLIENT)
+else
+	$(NODE) $(SCRIPT) reload-client $(LAUNCH_FLAGS)
+endif
 
 # make logs LOG_CLIENT=2  (or LOG_CLIENT= in .env)
 logs:
