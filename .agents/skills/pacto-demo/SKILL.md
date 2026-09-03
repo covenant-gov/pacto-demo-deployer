@@ -12,6 +12,8 @@ license: MIT
 - Ports: `1420+10n` / `1421+10n` / `9223+100n`. Dual-stack `127.0.0.1` and `::1`.
 - Do not set `PACTO_TEST_SANDBOX_ROOT` or `PACTO_DEV_WORLD`.
 - Wipe only `io.pacto.demo.<n>` directories under the OS app-data root.
+- Cargo `targets/<n>/` is separate: SHA-change / 12 GiB cap / orphan prune /
+  `clean-targets`. Do not confuse with app-data wipe or `io.pacto`.
 
 ## Secrets
 

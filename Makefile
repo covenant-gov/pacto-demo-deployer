@@ -1,7 +1,7 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-.PHONY: help up up-full up-light dm squad squad-all squad-join reload down down-wipe status wipe wipe-all
+.PHONY: help up up-full up-light dm squad squad-all squad-join reload down down-wipe status wipe wipe-all clean-targets
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -72,3 +72,6 @@ wipe:
 
 wipe-all:
 	$(NODE) $(SCRIPT) wipe --all
+
+clean-targets:
+	$(NODE) $(SCRIPT) clean-targets

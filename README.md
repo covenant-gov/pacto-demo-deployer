@@ -49,6 +49,7 @@ make down
 make down-wipe
 make wipe CLIENT=1
 make wipe-all
+make clean-targets      # delete targets/<n> cargo artifacts (not app-data)
 ```
 
 Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--light`, `--full`, `--all`, `--join`, `--name`, `--wipe`). `make help` prints the full list.
@@ -87,6 +88,7 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |
 | `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
 | `status` / `down` / `wipe` | Inspect, stop (after retracting Commons user and squad broadcasts), or delete `io.pacto.demo.<n>` storage |
+| `clean-targets` | Delete `targets/<n>` Cargo build dirs (not app-data / not `io.pacto`) |
 
 ## Isolation
 
@@ -105,6 +107,14 @@ make wipe CLIENT=1
 # rm -rf "$HOME/Library/Application Support/io.pacto.demo.1"
 ```
 
+Cargo build artifacts live under `targets/<n>/` (separate from app-data). Steady state is roughly `clients × ~8–12 GB`. `up` / `reload` wipe those dirs when the pacto-app SHA changes, when a client dir exceeds 12 GiB, or when pruning unused client indexes. Manual reclaim:
+
+```bash
+make clean-targets
+```
+
+Ordinary `down` does **not** delete `targets/` (same-SHA relaunch stays cached).
+
 Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account. After session, the deployer writes the recovery phrase to gitignored `backups/client-<n>.txt` (mode 0600) and does not log it.
 
 ## Layout
@@ -115,6 +125,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 - `src/commands/` — `up` / `reload` / `up-light` / `up-full` and lifecycle (`down`, `status`, `wipe`)
 - `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module and one row in [`src/scenarios/index.mjs`](src/scenarios/index.mjs) for a new branch test
 - Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
+- Cargo targets plan: [`docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md`](docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md)
 - `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo
 - `docs/plans/` / `docs/solutions/` — accepted plans and compounded learnings
 
@@ -123,7 +134,7 @@ Runtime / gitignored:
 - `.env` / `.env.example` — `PR` (`0` = pacto-app `main`) / `CLIENTS` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
 - `worktrees/<slug>/` — detached checkout of the chosen PR or branch
-- `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`)
+- `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`). Bounded by SHA-change / 12 GiB cap / orphan prune / `clean-targets`.
 - `logs/client-<n>.log` — `tauri dev` output
 - `pids.json` — running client PIDs for `down` / `status` / scenarios
 - `backups/client-<n>.txt` — seed phrases after session (mode 0600; never commit)
