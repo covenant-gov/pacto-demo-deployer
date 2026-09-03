@@ -211,6 +211,13 @@ export function writePidsFile(state) {
   fs.writeFileSync(PIDS_FILE, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+export function mergeClientRow(state, row) {
+  const clients = (state?.clients ?? []).filter(c => c.index !== row.index);
+  clients.push(row);
+  clients.sort((a, b) => a.index - b.index);
+  return { ...state, clients };
+}
+
 export function stopPid(pid) {
   if (!isAlive(pid)) return;
   if (process.platform === 'win32') {

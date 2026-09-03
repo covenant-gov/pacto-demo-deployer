@@ -1,15 +1,14 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import {
   DEFAULT_DEMO_PIN,
   DEFAULT_READY_TIMEOUT_MS,
   FORBIDDEN_IDENTIFIERS,
-  LOGS_DIR,
-  MAX_CLIENTS,
   PIDS_FILE,
+  clientLogPath,
+  launchIndexes,
   loadSeedConfig,
   normalizeLaunchRef,
-  parsePositiveInt,
+  resolveRequiredClient,
 } from '../lib/config.mjs';
 import { ensureAppClone, ensureWorktree, pnpmInstall, resolveRef } from '../lib/git.mjs';
 import {
@@ -24,6 +23,7 @@ import {
   identifierForClient,
   isAlive,
   log,
+  mergeClientRow,
   portsForIndex,
   readPidsFile,
   storageDirForClient,
@@ -33,19 +33,84 @@ import { assertClaimFree, claimForClient } from '../lib/claims.mjs';
 import { demoNameForIndex, setupDemoName } from '../lib/session.mjs';
 import { ensureCargoTargetsBudget, pruneOrphanTargetDirs } from '../lib/targets.mjs';
 import { runScenario } from '../scenarios/index.mjs';
-import { cmdDown } from './lifecycle.mjs';
+import { cmdDown, stopTrackedClients } from './lifecycle.mjs';
+
+function liveSiblings(existing, index) {
+  return (existing?.clients ?? []).filter(c => c.index !== index && isAlive(c.pid));
+}
+
+async function spawnOneClient({
+  index,
+  worktreePath,
+  windowTemplate,
+  seedConfig,
+  pin,
+  state,
+}) {
+  const identifier = identifierForClient(index);
+  const ports = portsForIndex(index);
+  const mnemonic = seedConfig.byIndex.get(index) ?? null;
+  const overlay = tauriOverlay(index, ports, windowTemplate);
+  if (overlay.identifier !== identifier) {
+    throw new Error('internal error: overlay identifier mismatch');
+  }
+  if (FORBIDDEN_IDENTIFIERS.has(overlay.identifier) || overlay.identifier === 'io.pacto') {
+    throw new Error('internal error: overlay would collide with the main client');
+  }
+
+  assertClaimFree(index);
+  if (!(await allPortsFree(ports))) {
+    throw new Error(
+      `ports for client ${index} are in use ` +
+        `(${ports.devServer}/${ports.hmr}/${ports.mcpBridge}). ` +
+        `Stop the occupant or run: node pacto-demo.mjs down`,
+    );
+  }
+
+  const logPath = clientLogPath(index);
+  const env = launchEnv(index, ports, mnemonic, pin, seedConfig.operatorEnv ?? {});
+  if (env.PACTO_TEST_SANDBOX_ROOT || env.PACTO_DEV_WORLD) {
+    throw new Error('internal error: sandbox env leaked into launch');
+  }
+
+  const kind = mnemonic ? 'seeded account' : 'fresh session (no mnemonic)';
+  log(`launching client ${index} ${identifier} :${ports.devServer} — ${kind}`);
+  const pid = spawnClient({ index, worktreePath, overlay, env, logPath });
+  claimForClient(index, pid);
+  const row = {
+    index,
+    identifier,
+    pid,
+    ports,
+    log: logPath,
+    seeded: Boolean(mnemonic),
+    storage: storageDirForClient(index),
+    name: demoNameForIndex(index),
+    npub: null,
+    broadcast: false,
+  };
+  Object.assign(state, mergeClientRow(state, row));
+  writePidsFile(state);
+
+  log(`  pid ${pid}, waiting for compile (log: ${logPath})`);
+  await waitUntilReady({ pid, ports, logPath, timeoutMs: DEFAULT_READY_TIMEOUT_MS });
+  const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
+  const launched = state.clients.find(c => c.index === index) ?? row;
+  try {
+    await setupDemoName(launched, sessionPin);
+  } catch (err) {
+    log(`  client ${index}: name/session failed: ${err.message}`);
+  }
+  writePidsFile(state);
+  return launched;
+}
 
 export async function cmdUp(args, opts = {}) {
-  const full = Boolean(opts.full) || Boolean(args.full) || args.command === 'up-full';
-  const light = Boolean(opts.light) || Boolean(args.light) || args.command === 'up-light';
+  const onlyClient = Boolean(opts.onlyClient) || args.command === 'up-client';
+  const full = !onlyClient && (Boolean(opts.full) || Boolean(args.full) || args.command === 'up-full');
+  const light =
+    onlyClient || Boolean(opts.light) || Boolean(args.light) || args.command === 'up-light';
   const doBroadcast = full || light;
-  log(
-    full
-      ? 'mode: up-full (login, broadcast, DMs, squad)'
-      : light
-        ? 'mode: up-light (login, broadcast)'
-        : 'mode: up (login)',
-  );
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
   const launchArgs = {
@@ -54,6 +119,30 @@ export async function cmdUp(args, opts = {}) {
     branch: args.branch || seedConfig.branch,
     clients: args.clients ?? seedConfig.clients,
   };
+
+  let indexes;
+  if (onlyClient) {
+    const n = resolveRequiredClient({
+      cliValue: args.client,
+      envValue: seedConfig.client,
+      cliLabel: '--client',
+      envLabel: 'CLIENT',
+      error: 'up-client requires --client <n> or CLIENT in .env',
+    });
+    indexes = launchIndexes({ onlyClient: n });
+  } else {
+    indexes = launchIndexes({ clients: launchArgs.clients });
+  }
+
+  log(
+    onlyClient
+      ? `mode: up-client (login, broadcast) client ${indexes[0]}`
+      : full
+        ? 'mode: up-full (login, broadcast, DMs, squad)'
+        : light
+          ? 'mode: up-light (login, broadcast)'
+          : 'mode: up (login)',
+  );
   if (seedConfig.loaded) {
     log(`seeds: ${seedConfig.envPath} (${seedConfig.byIndex.size} phrase(s))`);
   } else {
@@ -64,125 +153,115 @@ export async function cmdUp(args, opts = {}) {
     log(`operator env: ${operatorKeys.join(', ')}`);
   }
 
-  if (launchArgs.clients == null || launchArgs.clients === '') {
-    throw new Error('up requires --clients <n> or CLIENTS in .env');
-  }
-  const clients = parsePositiveInt(launchArgs.clients, '--clients');
-  if (clients > MAX_CLIENTS) {
-    throw new Error(`--clients must be <= ${MAX_CLIENTS}, got ${clients}`);
-  }
-
   const refArgs = normalizeLaunchRef(launchArgs);
   launchArgs.pr = refArgs.pr;
   launchArgs.branch = refArgs.branch;
 
-  for (let i = 1; i <= clients; i++) {
+  for (const i of indexes) {
     identifierForClient(i);
     portsForIndex(i);
     storageDirForClient(i);
-    assertClaimFree(i);
   }
 
   const existing = readPidsFile();
   const previousSha = existing?.ref?.sha || null;
   const previousLabel = existing?.ref?.label || null;
-  if (existing?.clients?.some(c => isAlive(c.pid))) {
-    log('stopping previous deployer session (storage kept)');
-    await cmdDown({ quiet: true });
-  } else if (existing) {
-    if (fs.existsSync(PIDS_FILE)) fs.unlinkSync(PIDS_FILE);
-  }
+  const siblings = onlyClient ? liveSiblings(existing, indexes[0]) : [];
 
-  const appRepo = ensureAppClone(seedConfig.appRemote);
-  const ref = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
-  if (previousSha && previousSha === ref.sha) {
-    log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)} (unchanged)`);
-  } else if (previousSha) {
-    log(
-      `checkout ${ref.repo} ${ref.label} @ ${previousSha.slice(0, 12)} → ${ref.sha.slice(0, 12)}` +
-        (previousLabel && previousLabel !== ref.label ? ` (was ${previousLabel})` : ''),
-    );
+  if (!onlyClient) {
+    for (const i of indexes) assertClaimFree(i);
+    if (existing?.clients?.some(c => isAlive(c.pid))) {
+      log('stopping previous deployer session (storage kept)');
+      await cmdDown({ quiet: true });
+    } else if (existing) {
+      if (fs.existsSync(PIDS_FILE)) fs.unlinkSync(PIDS_FILE);
+    }
   } else {
-    log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)}`);
+    const n = indexes[0];
+    const self = existing?.clients?.find(c => c.index === n);
+    if (self && isAlive(self.pid)) {
+      log(`stopping client ${n} only (storage kept)`);
+      await stopTrackedClients([self], { quiet: true });
+    }
   }
-  const worktreePath = ensureWorktree(ref, appRepo);
-  pnpmInstall(worktreePath);
 
-  ensureCargoTargetsBudget({
-    clients,
-    previousSha,
-    nextSha: ref.sha,
-  });
-  pruneOrphanTargetDirs(clients);
-
-  const windowTemplate = readWindowTemplate(worktreePath);
-  const state = {
-    startedAt: new Date().toISOString(),
-    ref,
-    worktree: worktreePath,
-    clients: [],
-  };
-
-  for (let i = 1; i <= clients; i++) {
-    const identifier = identifierForClient(i);
-    const ports = portsForIndex(i);
-    const mnemonic = seedConfig.byIndex.get(i) ?? null;
-    const overlay = tauriOverlay(i, ports, windowTemplate);
-    if (overlay.identifier !== identifier) {
-      throw new Error('internal error: overlay identifier mismatch');
+  let ref;
+  let worktreePath;
+  if (onlyClient && siblings.length > 0) {
+    if (!existing?.worktree || !fs.existsSync(existing.worktree)) {
+      throw new Error('live sibling clients need a worktree path in pids.json');
     }
-    if (FORBIDDEN_IDENTIFIERS.has(overlay.identifier) || overlay.identifier === 'io.pacto') {
-      throw new Error('internal error: overlay would collide with the main client');
-    }
-
-    assertClaimFree(i);
-    if (!(await allPortsFree(ports))) {
+    const appRepo = ensureAppClone(seedConfig.appRemote);
+    const requested = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
+    if (existing.ref?.sha && requested.sha !== existing.ref.sha) {
       throw new Error(
-        `ports for client ${i} are in use ` +
-          `(${ports.devServer}/${ports.hmr}/${ports.mcpBridge}). ` +
-          `Stop the occupant or run: node pacto-demo.mjs down`,
+        `up-client refuses to switch pacto-app (` +
+          `${String(existing.ref.sha).slice(0, 12)} → ${String(requested.sha).slice(0, 12)}) ` +
+          `while other clients are running. Stop them first, or match the live checkout.`,
       );
     }
-
-    const logPath = path.join(LOGS_DIR, `client-${i}.log`);
-    const env = launchEnv(i, ports, mnemonic, pin, seedConfig.operatorEnv ?? {});
-    if (env.PACTO_TEST_SANDBOX_ROOT || env.PACTO_DEV_WORLD) {
-      throw new Error('internal error: sandbox env leaked into launch');
+    ref = existing.ref;
+    worktreePath = existing.worktree;
+    log(`reusing live worktree ${worktreePath} @ ${String(ref?.sha ?? '').slice(0, 12)}`);
+  } else {
+    const appRepo = ensureAppClone(seedConfig.appRemote);
+    ref = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
+    if (previousSha && previousSha === ref.sha) {
+      log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)} (unchanged)`);
+    } else if (previousSha) {
+      log(
+        `checkout ${ref.repo} ${ref.label} @ ${previousSha.slice(0, 12)} → ${ref.sha.slice(0, 12)}` +
+          (previousLabel && previousLabel !== ref.label ? ` (was ${previousLabel})` : ''),
+      );
+    } else {
+      log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)}`);
     }
+    worktreePath = ensureWorktree(ref, appRepo);
+    pnpmInstall(worktreePath);
+  }
 
-    const kind = mnemonic ? 'seeded account' : 'fresh session (no mnemonic)';
-    log(`launching client ${i} ${identifier} :${ports.devServer} — ${kind}`);
-    const pid = spawnClient({ index: i, worktreePath, overlay, env, logPath });
-    claimForClient(i, pid);
-    const row = {
-      index: i,
-      identifier,
-      pid,
-      ports,
-      log: logPath,
-      seeded: Boolean(mnemonic),
-      storage: storageDirForClient(i),
-      name: demoNameForIndex(i),
-      npub: null,
-      broadcast: false,
-    };
-    state.clients.push(row);
-    writePidsFile(state);
+  ensureCargoTargetsBudget({
+    indexes,
+    previousSha,
+    nextSha: ref?.sha,
+    wipeAllOnShaChange: !onlyClient,
+  });
+  if (!onlyClient) {
+    pruneOrphanTargetDirs(indexes[indexes.length - 1]);
+  }
 
-    log(`  pid ${pid}, waiting for compile (log: ${logPath})`);
-    await waitUntilReady({ pid, ports, logPath, timeoutMs: DEFAULT_READY_TIMEOUT_MS });
-    const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
-    try {
-      await setupDemoName(row, sessionPin);
-    } catch (err) {
-      log(`  client ${i}: name/session failed: ${err.message}`);
-    }
-    writePidsFile(state);
+  const windowTemplate = readWindowTemplate(worktreePath);
+  const state = onlyClient
+    ? {
+        startedAt: existing?.startedAt || new Date().toISOString(),
+        ref,
+        worktree: worktreePath,
+        clients: [...(existing?.clients ?? [])],
+      }
+    : {
+        startedAt: new Date().toISOString(),
+        ref,
+        worktree: worktreePath,
+        clients: [],
+      };
+
+  const launched = [];
+  for (const i of indexes) {
+    launched.push(
+      await spawnOneClient({
+        index: i,
+        worktreePath,
+        windowTemplate,
+        seedConfig,
+        pin,
+        state,
+      }),
+    );
   }
 
   const sessionPin = (pin && String(pin).trim()) || DEFAULT_DEMO_PIN;
   if (doBroadcast) {
-    await runScenario('broadcast', { clients: state.clients, pin: sessionPin });
+    await runScenario('broadcast', { clients: launched, pin: sessionPin });
   }
   if (full) {
     log('up-full: DMs + squad');
@@ -191,7 +270,7 @@ export async function cmdUp(args, opts = {}) {
   }
   writePidsFile(state);
   log('');
-  log(`launched ${clients} client(s). Storage persists until wipe.`);
+  log(`launched ${indexes.length} client(s). Storage persists until wipe.`);
   log('  node pacto-demo.mjs status');
   log('  node pacto-demo.mjs dm');
   log('  node pacto-demo.mjs squad');

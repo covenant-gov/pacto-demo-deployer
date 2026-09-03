@@ -34,6 +34,9 @@ license: MIT
 
 - Client 1 `alpha-test`, client 2 `bravo-test` (`demoNameForIndex`).
 - `make up` = launch + session. `make up-light` = `up` + Commons user broadcast.
+  `make up-client` = up-light for `CLIENT` / `--client` only (`PACTO_DEMO_SEED_N`);
+  does not stop or spawn other indexes. `make logs` follows `logs/client-<n>.log`
+  via `LOG_CLIENT` / `--client`.
   `PR=0` / `--pr 0` checks out pacto-app `main`.
 - `make down` retracts user and catalog-squad Commons broadcasts before stop.
 - `make dm` / `make squad` require live `pids.json`.

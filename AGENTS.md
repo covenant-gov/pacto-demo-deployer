@@ -42,6 +42,8 @@ explicitly asks.
 make up              # launch, login/create, backup seed, profile
 make up-light        # up + Commons user broadcast
 make up-full         # up-light + DMs + squad (client 1 invites client 2; invitee accepts)
+make up-client       # up-light for CLIENT / --client only (other clients untouched)
+make logs            # follow logs/client-<n>.log (LOG_CLIENT / --client)
 make dm
 make squad
 make squad NAME=my-squad
@@ -55,7 +57,7 @@ make status
 make clean-targets   # delete targets/<n> cargo artifacts (not app-data)
 ```
 
-CLI flags override `.env` (`--pr`, `--branch`, `--clients`, `--pin`, `--name`).
+CLI flags override `.env` (`--pr`, `--branch`, `--clients`, `--client`, `--pin`, `--name`).
 `--pr` / `--branch` always refer to pacto-app. `PR=0` / `--pr 0` checks out
 pacto-app `main`.
 

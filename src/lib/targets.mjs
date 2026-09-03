@@ -139,18 +139,35 @@ export function pruneOrphanTargetDirs(clients, targetsDir = TARGETS_DIR) {
  */
 export function ensureCargoTargetsBudget({
   clients,
+  indexes = null,
   previousSha = null,
   nextSha = null,
+  wipeAllOnShaChange = true,
   targetsDir = TARGETS_DIR,
   maxBytes = MAX_TARGET_DIR_BYTES,
 } = {}) {
-  const n = Number(clients);
-  if (!Number.isInteger(n) || n < 1) {
-    throw new Error(`clients must be >= 1, got ${clients}`);
+  let targetIndexes;
+  if (indexes != null) {
+    targetIndexes = [...indexes].map(i => {
+      const n = Number(i);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`target client index must be >= 1, got ${i}`);
+      }
+      return n;
+    });
+    if (targetIndexes.length === 0) {
+      throw new Error('indexes must be a non-empty list');
+    }
+  } else {
+    const n = Number(clients);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new Error(`clients must be >= 1, got ${clients}`);
+    }
+    targetIndexes = Array.from({ length: n }, (_, i) => i + 1);
   }
 
   const shaChanged = Boolean(previousSha && nextSha && previousSha !== nextSha);
-  if (shaChanged) {
+  if (shaChanged && wipeAllOnShaChange) {
     log(
       `cargo targets: pacto-app SHA changed ` +
         `(${String(previousSha).slice(0, 12)} → ${String(nextSha).slice(0, 12)}); wiping ${targetsDir}`,
@@ -160,7 +177,7 @@ export function ensureCargoTargetsBudget({
   }
 
   const wipedClients = [];
-  for (let i = 1; i <= n; i++) {
+  for (const i of targetIndexes) {
     const dir = targetDirForClient(i, targetsDir);
     if (!fs.existsSync(dir)) continue;
     const size = dirSizeBytes(dir);

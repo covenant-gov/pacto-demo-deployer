@@ -1,7 +1,7 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-.PHONY: help up up-full up-light dm squad squad-all squad-join reload down down-wipe status wipe wipe-all clean-targets
+.PHONY: help up up-full up-light up-client dm squad squad-all squad-join reload logs down down-wipe status wipe wipe-all clean-targets
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -41,6 +41,14 @@ up-full:
 up-light:
 	$(NODE) $(SCRIPT) up --light $(LAUNCH_FLAGS)
 
+# make up-client CLIENT=2  (or CLIENT= in .env)
+up-client:
+ifdef CLIENT
+	$(NODE) $(SCRIPT) up-client $(LAUNCH_FLAGS) --client $(CLIENT)
+else
+	$(NODE) $(SCRIPT) up-client $(LAUNCH_FLAGS)
+endif
+
 dm:
 	$(NODE) $(SCRIPT) dm $(LAUNCH_FLAGS)
 
@@ -55,6 +63,14 @@ squad-join:
 
 reload:
 	$(NODE) $(SCRIPT) reload $(LAUNCH_FLAGS)
+
+# make logs LOG_CLIENT=2  (or LOG_CLIENT= in .env)
+logs:
+ifdef LOG_CLIENT
+	$(NODE) $(SCRIPT) logs --client $(LOG_CLIENT)
+else
+	$(NODE) $(SCRIPT) logs
+endif
 
 down:
 	$(NODE) $(SCRIPT) down
