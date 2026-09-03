@@ -116,6 +116,25 @@ test('ensureCargoTargetsBudget leaves under-budget same-SHA dirs alone', () => {
   assert.ok(fs.existsSync(path.join(root, '1', 'ok.bin')));
 });
 
+test('single-index cargo budget never wipes sibling dirs on SHA change', () => {
+  const root = tmpTargetsDir();
+  writeFile(path.join(root, '1', 'keep.bin'), 32);
+  writeFile(path.join(root, '2', 'ok.bin'), 32);
+
+  const result = ensureCargoTargetsBudget({
+    indexes: [2],
+    previousSha: 'aaaaaaaaaaaaaaaa',
+    nextSha: 'bbbbbbbbbbbbbbbb',
+    wipeAllOnShaChange: false,
+    targetsDir: root,
+    maxBytes: 1024,
+  });
+
+  assert.deepStrictEqual(result, { wipedAll: false, wipedClients: [] });
+  assert.ok(fs.existsSync(path.join(root, '1', 'keep.bin')));
+  assert.ok(fs.existsSync(path.join(root, '2', 'ok.bin')));
+});
+
 test('wipeAllTargets removes numeric client dirs and stray files', () => {
   const root = tmpTargetsDir();
   writeFile(path.join(root, '1', 'a.bin'), 8);

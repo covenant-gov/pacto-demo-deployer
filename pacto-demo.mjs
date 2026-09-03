@@ -11,7 +11,7 @@
 import { usageText } from './src/lib/config.mjs';
 import { fail, log } from './src/lib/process.mjs';
 import { cmdUp } from './src/commands/up.mjs';
-import { cmdDown, cmdStatus, cmdWipe, cmdCleanTargets } from './src/commands/lifecycle.mjs';
+import { cmdDown, cmdLogs, cmdStatus, cmdWipe, cmdCleanTargets } from './src/commands/lifecycle.mjs';
 import { cmdDm, cmdSquad } from './src/scenarios/index.mjs';
 
 const USAGE = usageText();
@@ -131,11 +131,16 @@ async function main() {
       case 'up':
       case 'up-full':
       case 'up-light':
+      case 'up-client':
       case 'reload':
         await cmdUp(args, {
           full: args.command === 'up-full' || args.full,
           light: args.command === 'up-light' || args.light,
+          onlyClient: args.command === 'up-client',
         });
+        break;
+      case 'logs':
+        await cmdLogs(args);
         break;
       case 'dm':
         await cmdDm(args);

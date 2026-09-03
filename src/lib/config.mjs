@@ -88,6 +88,47 @@ export function parsePositiveInt(value, label) {
   return n;
 }
 
+export function parseClientIndex(value, label) {
+  const n = parsePositiveInt(value, label);
+  if (n > MAX_CLIENTS) {
+    throw new Error(`${label} must be <= ${MAX_CLIENTS}, got ${n}`);
+  }
+  return n;
+}
+
+/** CLI `--client` wins over the env value. */
+export function resolveRequiredClient({
+  cliValue,
+  envValue,
+  cliLabel = '--client',
+  envLabel,
+  error,
+}) {
+  const cliSet = cliValue != null && String(cliValue).trim() !== '';
+  const raw = cliSet ? cliValue : envValue;
+  if (raw == null || String(raw).trim() === '') {
+    throw new Error(error);
+  }
+  return parseClientIndex(raw, cliSet ? cliLabel : envLabel);
+}
+
+/** Full `up`: `1..clients`. `up-client`: a single index, never 1..N. */
+export function launchIndexes({ clients, onlyClient = null } = {}) {
+  if (onlyClient != null && String(onlyClient).trim() !== '') {
+    return [parseClientIndex(onlyClient, '--client')];
+  }
+  if (clients == null || clients === '') {
+    throw new Error('up requires --clients <n> or CLIENTS in .env');
+  }
+  const count = parseClientIndex(clients, '--clients');
+  return Array.from({ length: count }, (_, i) => i + 1);
+}
+
+export function clientLogPath(index, logsDir = LOGS_DIR) {
+  const n = parseClientIndex(index, 'client');
+  return path.join(logsDir, `client-${n}.log`);
+}
+
 function trimRefValue(value) {
   if (value == null) return '';
   return String(value).trim();
@@ -190,7 +231,7 @@ export function loadSeedConfig(args) {
     byIndex.set(Number(match[1]), phrase);
   }
 
-  args.seeds.forEach((seed, i) => {
+  (args.seeds ?? []).forEach((seed, i) => {
     const phrase = seed.trim();
     if (phrase) byIndex.set(i + 1, phrase);
   });
@@ -210,6 +251,8 @@ export function loadSeedConfig(args) {
     pr: envVars.PR?.trim() || null,
     branch: envVars.BRANCH?.trim() || null,
     clients: envVars.CLIENTS?.trim() || null,
+    client: envVars.CLIENT?.trim() || null,
+    logClient: envVars.LOG_CLIENT?.trim() || null,
   };
 }
 
@@ -242,6 +285,8 @@ Usage:
   node pacto-demo.mjs up --pr 0 --clients <n>   # pacto-app main
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
+  node pacto-demo.mjs up-client # up-light for one CLIENT / --client (other clients untouched)
+  node pacto-demo.mjs logs      # follow logs/client-<n>.log (LOG_CLIENT / --client)
   node pacto-demo.mjs down
   node pacto-demo.mjs down --wipe
   node pacto-demo.mjs status
@@ -258,14 +303,14 @@ Options:
   --pin <pin>           Dev autologin PIN (default: PACTO_DEMO_PIN or 123456)
   --name <name>         Squad display name (default: squad-test-<n>)
   --wipe                After down: wipe every io.pacto.demo.<n> directory (storage is kept otherwise)
-  --client <n>          Wipe storage for io.pacto.demo.<n> only
+  --client <n>          wipe / logs / up-client: io.pacto.demo.<n> only
   --light               After up: also run Commons user broadcast
   --full                After up: also run broadcast, DMs and squad (client 1 invites client 2)
   --all                 wipe: every demo storage dir; squad: invite all other live clients
   --join                squad: accept pending invite (latest creator squad, or --name)
 
 Defaults (CLI overrides .env):
-  PR / BRANCH / CLIENTS in .env (PR=0 → pacto-app main)
+  PR / BRANCH / CLIENTS / CLIENT / LOG_CLIENT in .env (PR=0 → pacto-app main)
 
 Notes:
   up/reload wipe cargo targets/<n> when the pacto-app SHA changes, when a client
@@ -282,6 +327,8 @@ Makefile:
   make squad-all
   make squad-join
   make reload
+  make up-client            # CLIENT= in .env or make up-client CLIENT=2
+  make logs                 # LOG_CLIENT= in .env or make logs LOG_CLIENT=2
   make down
   make down-wipe
   make wipe CLIENT=1

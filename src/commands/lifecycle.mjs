@@ -1,11 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import {
   IDENTIFIER_RE,
   PIDS_FILE,
   STOP_GRACE_MS,
   TARGETS_DIR,
+  clientLogPath,
+  loadSeedConfig,
   parsePositiveInt,
+  resolveRequiredClient,
 } from '../lib/config.mjs';
 import {
   appDataRoot,
@@ -28,13 +32,13 @@ import {
 } from '../lib/targets.mjs';
 import { cancelDemoBroadcast } from '../scenarios/index.mjs';
 
-async function stopClients(state, { quiet = false } = {}) {
-  const clients = state?.clients ?? [];
-  if (clients.length === 0) {
+export async function stopTrackedClients(clients, { quiet = false } = {}) {
+  const rows = clients ?? [];
+  if (rows.length === 0) {
     if (!quiet) log('no tracked clients');
     return;
   }
-  for (const client of clients) {
+  for (const client of rows) {
     if (!isAlive(client.pid)) {
       if (!quiet) log(`client ${client.index}: already stopped (pid ${client.pid})`);
       releaseClaimForClient(client.index);
@@ -47,15 +51,19 @@ async function stopClients(state, { quiet = false } = {}) {
   }
   const deadline = Date.now() + STOP_GRACE_MS;
   while (Date.now() < deadline) {
-    if (clients.every(c => !isAlive(c.pid))) break;
+    if (rows.every(c => !isAlive(c.pid))) break;
     await sleep(200);
   }
-  for (const client of clients) {
+  for (const client of rows) {
     if (isAlive(client.pid)) {
       if (!quiet) log(`client ${client.index}: force-killing pid ${client.pid}`);
       killPid(client.pid);
     }
   }
+}
+
+async function stopClients(state, { quiet = false } = {}) {
+  await stopTrackedClients(state?.clients ?? [], { quiet });
 }
 
 export async function cmdDown({ quiet = false, wipe = false } = {}) {
@@ -68,6 +76,30 @@ export async function cmdDown({ quiet = false, wipe = false } = {}) {
     if (!quiet) log(wipe ? 'stopped.' : 'stopped. storage was not wiped.');
   }
   if (wipe) cmdWipe({ all: true });
+}
+
+export function cmdLogs(args, { spawnFn = spawn } = {}) {
+  const seedConfig = loadSeedConfig(args);
+  const index = resolveRequiredClient({
+    cliValue: args.client,
+    envValue: seedConfig.logClient,
+    cliLabel: '--client',
+    envLabel: 'LOG_CLIENT',
+    error: 'logs requires --client <n> or LOG_CLIENT in .env',
+  });
+  const logPath = clientLogPath(index);
+  if (!fs.existsSync(logPath)) {
+    throw new Error(`no log file at ${logPath}`);
+  }
+  log(`following ${logPath} (Ctrl+C to stop)`);
+  const child = spawnFn('tail', ['-F', logPath], { stdio: 'inherit' });
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => {
+      if (code === 0 || code == null) resolve();
+      else reject(new Error(`tail exited ${signal ? signal : code}`));
+    });
+  });
 }
 
 export function cmdStatus() {
