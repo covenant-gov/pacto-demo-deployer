@@ -27,6 +27,7 @@ make up-light           # up, then Commons user broadcast
 make up-full            # up-light, then DMs + squad
 make up-simple          # spawn only (no MCP session / scenarios)
 make reload             # fetch latest PR/branch commits and rebuild (storage kept)
+make reload-simple      # reload worktree, spawn only (no MCP session)
 make reload-client CLIENT=2  # reload one client only (siblings untouched)
 make up PR=123 CLIENTS=3
 make up PR=0                # pacto-app main
@@ -80,9 +81,9 @@ PACTO_DEMO_SEED_3="twelve words for the third account ..."
 
 `PACTO_DEMO_SEED_N` logs into client N. Clients with no matching seed start on the welcome screen. Optional `PACTO_DEMO_PIN` (default `123456`). `--seed` on the CLI overrides the numbered `.env` slot for that client.
 
-pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`, and the other names in pacto-app's [`.env.example`](https://github.com/covenant-gov/pacto-app/blob/main/.env.example)) also live in this repo's `.env`. `up` / `reload` forward the allowlisted keys into each `tauri dev` process. A variable already set in the shell wins. Values are never logged.
+pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`, and the other names in pacto-app's [`.env.example`](https://github.com/covenant-gov/pacto-app/blob/main/.env.example)) also live in this repo's `.env`. `up` / `reload` / `reload-simple` forward the allowlisted keys into each `tauri dev` process. A variable already set in the shell wins. Values are never logged.
 
-`reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept. `reload-client` does the same for one `CLIENT` index only (siblings stay up; SHA switch refused while they run).
+`reload` (or `up` again) fetches the current PR/branch HEAD, resets the worktree, reinstalls, and restarts clients. Storage is kept. `reload-simple` does the same update path but skips deployer MCP (spawn only). `reload-client` does session reload for one `CLIENT` index only (siblings stay up; SHA switch refused while they run).
 
 `up-simple` / `up-simple-client` spawn windows and wait until ready, still forwarding seeds/PIN/operator env, but skip deployer MCP (no `setupDemoName`, broadcast, dm, or squad).
 
@@ -100,6 +101,7 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `up-simple-client` | Spawn-only single index (`CLIENT` / `--client`) |
 | `logs` | Follow `logs/client-<n>.log` (`LOG_CLIENT` / `--client`) |
 | `reload` | Same launch path as `up` after updating the pacto-app worktree |
+| `reload-simple` | Same worktree update as `reload`, then spawn only (no MCP session) |
 | `reload-client` | Same as `reload` for one index (`CLIENT` / `--client`); siblings untouched |
 | `dm` | Client 1 DMs the others; they reply. Requires a live session |
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |

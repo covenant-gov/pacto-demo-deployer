@@ -171,4 +171,12 @@ test('resolveUpMode maps simple and reload-client correctly', () => {
     doSession: true,
     doBroadcast: false,
   });
+  assert.deepEqual(resolveUpMode({ command: 'reload-simple' }), {
+    onlyClient: false,
+    simple: true,
+    full: false,
+    light: false,
+    doSession: false,
+    doBroadcast: false,
+  });
 });

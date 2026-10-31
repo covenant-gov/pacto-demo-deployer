@@ -37,6 +37,7 @@ license: MIT
   `make up-simple` = spawn only (seed/PIN env still forwarded; no MCP session/scenarios).
   `make up-client` = up-light for `CLIENT` / `--client` only (`PACTO_DEMO_SEED_N`);
   does not stop or spawn other indexes. `make up-simple-client` = spawn-only single client.
+  `make reload-simple` = same worktree update as `reload`, spawn only (no MCP session).
   `make reload-client` = session reload for one `CLIENT` (no broadcast; siblings untouched).
   `make logs` follows `logs/client-<n>.log` via `LOG_CLIENT` / `--client`.
   `PR=0` / `--pr 0` checks out pacto-app `main`.

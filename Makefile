@@ -1,7 +1,7 @@
 NODE ?= node
 SCRIPT := pacto-demo.mjs
 
-.PHONY: help up up-full up-light up-simple up-client up-simple-client dm squad squad-all squad-join reload reload-client logs down down-wipe status wipe wipe-all clean-targets
+.PHONY: help up up-full up-light up-simple up-client up-simple-client dm squad squad-all squad-join reload reload-simple reload-client logs down down-wipe status wipe wipe-all clean-targets
 
 help:
 	@$(NODE) $(SCRIPT) help
@@ -74,6 +74,9 @@ squad-join:
 
 reload:
 	$(NODE) $(SCRIPT) reload $(LAUNCH_FLAGS)
+
+reload-simple:
+	$(NODE) $(SCRIPT) reload-simple $(LAUNCH_FLAGS)
 
 # make reload-client CLIENT=2  (or CLIENT= in .env)
 reload-client:

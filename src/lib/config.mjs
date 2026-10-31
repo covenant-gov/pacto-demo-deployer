@@ -285,6 +285,7 @@ Usage:
   node pacto-demo.mjs up --pr 0 --clients <n>   # pacto-app main
   node pacto-demo.mjs up --branch <name> --clients <n>
   node pacto-demo.mjs reload    # fetch latest PR/branch commits and rebuild (storage kept)
+  node pacto-demo.mjs reload-simple # same as reload, spawn only (no MCP session)
   node pacto-demo.mjs reload-client # same as reload for one CLIENT / --client
   node pacto-demo.mjs up-simple # spawn clients only (no MCP session / scenarios)
   node pacto-demo.mjs up-client # up-light for one CLIENT / --client (other clients untouched)
@@ -330,6 +331,7 @@ Makefile:
   make squad-all
   make squad-join
   make reload
+  make reload-simple        # reload worktree, spawn only (no MCP session)
   make reload-client        # CLIENT= in .env or make reload-client CLIENT=2
   make up-simple
   make up-client            # CLIENT= in .env or make up-client CLIENT=2

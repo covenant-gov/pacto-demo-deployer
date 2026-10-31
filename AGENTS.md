@@ -52,6 +52,7 @@ make squad NAME=my-squad
 make squad-all
 make squad-join      # accept pending invite (latest creator squad, or NAME=)
 make reload
+make reload-simple   # reload worktree, spawn only (no MCP session)
 make reload-client   # reload for CLIENT / --client only (other clients untouched)
 make down
 make down-wipe

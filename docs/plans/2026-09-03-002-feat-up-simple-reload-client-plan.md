@@ -8,6 +8,8 @@ Accepted 2026-09-03.
   pass `PACTO_DEMO_SEED_N` / PIN / operator env. Skip deployer MCP:
   no `setupDemoName`, no broadcast / dm / squad.
 - **`make reload`** stays full-session (`1..CLIENTS`), session setup, no broadcast.
+- **`make reload-simple`** = same worktree update / restart as `reload`, spawn
+  only (no MCP session), like `up-simple`.
 - **`make reload-client`** = single-index path (`CLIENT` / `--client`), same
   sibling/worktree/cargo safety as `up-client`, session setup like `reload`
   (no Commons broadcast).
@@ -19,7 +21,7 @@ Accepted 2026-09-03.
 | `up` / `reload` | no | yes | no |
 | `up-light` / `up-full` | no | yes | yes (+ dm/squad if full) |
 | `up-client` | yes | yes | yes |
-| `up-simple` | no | no | no |
+| `up-simple` / `reload-simple` | no | no | no |
 | `up-simple-client` | yes | no | no |
 | `reload-client` | yes | yes | no |
 

@@ -48,10 +48,14 @@ export function resolveUpMode(args = {}, opts = {}) {
     command === 'up-simple-client' ||
     command === 'reload-client';
   const simple =
-    Boolean(opts.simple) || command === 'up-simple' || command === 'up-simple-client';
+    Boolean(opts.simple) ||
+    command === 'up-simple' ||
+    command === 'up-simple-client' ||
+    command === 'reload-simple';
   const full =
     !onlyClient && !simple && (Boolean(opts.full) || Boolean(args.full) || command === 'up-full');
   // up-client stays light; reload-client is session-only (like reload/up).
+  // reload-simple is spawn-only after worktree update (like up-simple).
   const light =
     (!simple && onlyClient && command === 'up-client') ||
     Boolean(opts.light) ||
@@ -164,12 +168,16 @@ export async function cmdUp(args, opts = {}) {
         : onlyClient
           ? `mode: reload-client (login) client ${indexes[0]}`
           : simple
-            ? 'mode: up-simple (spawn only)'
+            ? args.command === 'reload-simple'
+              ? 'mode: reload-simple (spawn only)'
+              : 'mode: up-simple (spawn only)'
             : full
               ? 'mode: up-full (login, broadcast, DMs, squad)'
               : light
                 ? 'mode: up-light (login, broadcast)'
-                : 'mode: up (login)',
+                : args.command === 'reload'
+                  ? 'mode: reload (login)'
+                  : 'mode: up (login)',
   );
   if (seedConfig.loaded) {
     log(`seeds: ${seedConfig.envPath} (${seedConfig.byIndex.size} phrase(s))`);
