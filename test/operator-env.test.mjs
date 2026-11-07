@@ -33,7 +33,11 @@ test('applyOperatorEnv does not override a live shell value', () => {
 
 test('launchEnv forwards operator keys and still strips sandbox vars', () => {
   const previous = process.env.ALCHEMY_RPC_KEY;
+  const previousGh = process.env.GITHUB_TOKEN;
+  const previousSeed = process.env.PACTO_DEMO_SEED_1;
   delete process.env.ALCHEMY_RPC_KEY;
+  process.env.GITHUB_TOKEN = 'ghs_placeholder_not_real';
+  process.env.PACTO_DEMO_SEED_1 = 'alpha bravo charlie';
   try {
     const env = launchEnv(
       1,
@@ -48,8 +52,15 @@ test('launchEnv forwards operator keys and still strips sandbox vars', () => {
     assert.equal(env.ALCHEMY_RPC_KEY, 'alchemy-secret');
     assert.equal(env.PACTO_TEST_SANDBOX_ROOT, undefined);
     assert.equal(env.PACTO_DEV_WORLD, undefined);
+    assert.equal(env.GITHUB_TOKEN, undefined);
+    assert.equal(env.PACTO_DEMO_SEED_1, undefined);
+    assert.equal(env.PACTO_DEV_PORT, '1430');
   } finally {
     if (previous === undefined) delete process.env.ALCHEMY_RPC_KEY;
     else process.env.ALCHEMY_RPC_KEY = previous;
+    if (previousGh === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previousGh;
+    if (previousSeed === undefined) delete process.env.PACTO_DEMO_SEED_1;
+    else process.env.PACTO_DEMO_SEED_1 = previousSeed;
   }
 });

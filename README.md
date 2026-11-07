@@ -59,9 +59,29 @@ make wipe-all
 make clean-targets      # delete targets/<n> cargo artifacts (not app-data)
 ```
 
-Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--client`, `--light`, `--full`, `--all`, `--join`, `--name`, `--wipe`). `make help` prints the full list.
+Node equivalent: `node pacto-demo.mjs <command>` with the same flags (`--pr`, `--branch`, `--clients`, `--client`, `--light`, `--full`, `--all`, `--join`, `--name`, `--wipe`, `--trust-checkout`, `--allow-install-scripts`). `make help` prints the full list.
 
 First `up` clones [covenant-gov/pacto-app](https://github.com/covenant-gov/pacto-app) into `.cache/pacto-app`. Override the remote with `PACTO_APP_REMOTE` in `.env`.
+
+### Trust boundary (PR / foreign remote)
+
+Installing and running a pacto-app **pull request** (`PR=` / `--pr` ≥ 1) or a
+**non-default** `PACTO_APP_REMOTE` requires an explicit opt-in:
+
+```bash
+make up PR=123 CLIENTS=2 TRUST_CHECKOUT=1
+# or: PACTO_DEMO_TRUST_CHECKOUT=1 in .env / --trust-checkout
+```
+
+Consent means you accept running that checkout’s install/build/app on your
+machine. It is **not** a safety guarantee and does not vouch for the PR author.
+
+Default install is `pnpm install --frozen-lockfile --ignore-scripts`. Use
+`ALLOW_INSTALL_SCRIPTS=1` / `--allow-install-scripts` /
+`PACTO_DEMO_ALLOW_INSTALL_SCRIPTS=1` when a checkout needs lifecycle scripts.
+`--ignore-scripts` does **not** sandbox `tauri` build or the running app.
+
+Details and limits: [`docs/security/OPERATOR_TRUST_BOUNDARY.md`](docs/security/OPERATOR_TRUST_BOUNDARY.md).
 
 Launch target and seed phrases live in `.env` (gitignored):
 
@@ -147,6 +167,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 - Cargo targets plan: [`docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md`](docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md)
 - Logs / up-client: [`docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md`](docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md)
 - up-simple / reload-client: [`docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md`](docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md)
+- Trust boundary: [`docs/plans/2026-11-07-001-feat-trust-boundary-hardening-plan.md`](docs/plans/2026-11-07-001-feat-trust-boundary-hardening-plan.md) and [`docs/security/OPERATOR_TRUST_BOUNDARY.md`](docs/security/OPERATOR_TRUST_BOUNDARY.md)
 - `AGENTS.md` — agent-agnostic instructions; `.agents/skills/` for CE loop + pacto-demo
 - `docs/plans/` / `docs/solutions/` — accepted plans and compounded learnings
 
@@ -167,6 +188,10 @@ Plain `node --test`, no dependencies or build step:
 ```bash
 node --test 'test/*.test.mjs'
 ```
+
+Trust-boundary / install / env scrub cases live in `test/trust-boundary.test.mjs`,
+`test/cli-trust-flags.test.mjs`, and `test/seed-trust-config.test.mjs` (mocks only;
+they never fetch or run a PR checkout).
 
 `test/cross-repo-claims.test.mjs` skips cleanly unless a pacto-app checkout is
 present at `PACTO_APP_DEV_PORTS` (default `/Users/opselite/src/covenant-gov/pacto-app/scripts/dev-ports.mjs`).

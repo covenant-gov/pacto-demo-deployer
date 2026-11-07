@@ -253,6 +253,14 @@ export function loadSeedConfig(args) {
     clients: envVars.CLIENTS?.trim() || null,
     client: envVars.CLIENT?.trim() || null,
     logClient: envVars.LOG_CLIENT?.trim() || null,
+    trustCheckout:
+      envVars.PACTO_DEMO_TRUST_CHECKOUT?.trim() ||
+      process.env.PACTO_DEMO_TRUST_CHECKOUT?.trim() ||
+      null,
+    allowInstallScripts:
+      envVars.PACTO_DEMO_ALLOW_INSTALL_SCRIPTS?.trim() ||
+      process.env.PACTO_DEMO_ALLOW_INSTALL_SCRIPTS?.trim() ||
+      null,
   };
 }
 
@@ -312,14 +320,20 @@ Options:
   --full                After up: also run broadcast, DMs and squad (client 1 invites client 2)
   --all                 wipe: every demo storage dir; squad: invite all other live clients
   --join                squad: accept pending invite (latest creator squad, or --name)
+  --trust-checkout      Required to install/run a pacto-app PR or non-default PACTO_APP_REMOTE
+  --allow-install-scripts  Opt into pnpm lifecycle scripts (default install uses --ignore-scripts)
 
 Defaults (CLI overrides .env):
   PR / BRANCH / CLIENTS / CLIENT / LOG_CLIENT in .env (PR=0 → pacto-app main)
+  PACTO_DEMO_TRUST_CHECKOUT / PACTO_DEMO_ALLOW_INSTALL_SCRIPTS
 
 Notes:
   up/reload wipe cargo targets/<n> when the pacto-app SHA changes, when a client
   dir exceeds 12 GiB, or when pruning unused client indexes. App-data wipe is separate.
   up/reload also prune worktrees/ to only main + the active PR/branch slug.
+  PR / foreign-remote checkouts need --trust-checkout (consent ≠ safety). Default
+  pnpm install uses --ignore-scripts; that does not sandbox tauri build/runtime.
+  See docs/security/OPERATOR_TRUST_BOUNDARY.md.
 
 Makefile:
   make up

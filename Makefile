@@ -31,6 +31,12 @@ endif
 ifdef NAME
   LAUNCH_FLAGS += --name $(NAME)
 endif
+ifdef TRUST_CHECKOUT
+  LAUNCH_FLAGS += --trust-checkout
+endif
+ifdef ALLOW_INSTALL_SCRIPTS
+  LAUNCH_FLAGS += --allow-install-scripts
+endif
 
 up:
 	$(NODE) $(SCRIPT) up $(LAUNCH_FLAGS)
