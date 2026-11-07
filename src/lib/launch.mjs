@@ -10,6 +10,7 @@ import {
   log,
   sleep,
 } from './process.mjs';
+import { scrubChildEnv } from './trust.mjs';
 
 export function readWindowTemplate(worktreePath) {
   const confPath = path.join(worktreePath, 'src-tauri', 'tauri.conf.json');
@@ -42,7 +43,7 @@ export function tauriOverlay(index, ports, windowTemplate) {
 }
 
 export function launchEnv(index, ports, mnemonic, pin, operatorEnv = {}) {
-  const env = { ...process.env };
+  const env = scrubChildEnv(process.env);
   env.PACTO_DEV_PORT = String(ports.devServer);
   env.PACTO_DEV_HMR_PORT = String(ports.hmr);
   env.PACTO_MCP_BRIDGE_PORT = String(ports.mcpBridge);

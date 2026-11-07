@@ -8,6 +8,7 @@ import {
   parsePositiveInt,
 } from './config.mjs';
 import { commandExists, log, run, slugForRef } from './process.mjs';
+import { pnpmInstallArgs, scrubChildEnv } from './trust.mjs';
 
 function githubRepoSlug(remote) {
   const trimmed = String(remote).trim().replace(/\.git$/, '').replace(/\/+$/, '');
@@ -192,7 +193,15 @@ export function pruneStaleWorktrees(ref, appRepo, {
   return removed;
 }
 
-export function pnpmInstall(worktreePath) {
-  log('pnpm install --frozen-lockfile');
-  run('pnpm', ['install', '--frozen-lockfile'], { cwd: worktreePath, stdio: ['ignore', 'inherit', 'inherit'] });
+export function pnpmInstall(worktreePath, {
+  allowInstallScripts = false,
+  env,
+} = {}) {
+  const args = pnpmInstallArgs({ allowInstallScripts });
+  log(`pnpm ${args.join(' ')}`);
+  run('pnpm', args, {
+    cwd: worktreePath,
+    stdio: ['ignore', 'inherit', 'inherit'],
+    env: env ?? scrubChildEnv(),
+  });
 }

@@ -23,7 +23,18 @@ license: MIT
 - `PACTO_DEMO_SEED_N` → `PACTO_DEV_LOGIN_MNEMONIC`. PIN via `PACTO_DEMO_PIN` (default `123456`).
 - `ALCHEMY_RPC_KEY` / `PIMLICO_API_KEY` / other `APP_OPERATOR_ENV_KEYS` in
   this repo's `.env` are forwarded into each client. Shell env wins.
+- Child install/launch envs scrub denylisted credentials and `PACTO_DEMO_SEED_*`
+  names; `git`/`gh` in the deployer keep the parent env.
 - After session: `get_seed` → `backups/client-<n>.txt` (0600), then `backup_verified=true`.
+
+## Trust boundary
+
+- `--pr` ≥ 1 or non-default `PACTO_APP_REMOTE` needs `--trust-checkout` /
+  `PACTO_DEMO_TRUST_CHECKOUT=1` before clone/install/spawn. Consent ≠ safety.
+- Default install: `pnpm install --frozen-lockfile --ignore-scripts`. Opt in
+  with `--allow-install-scripts` / `PACTO_DEMO_ALLOW_INSTALL_SCRIPTS=1`.
+- `--ignore-scripts` does not sandbox tauri build or runtime. Full limits:
+  `docs/security/OPERATOR_TRUST_BOUNDARY.md`.
 
 ## MCP
 

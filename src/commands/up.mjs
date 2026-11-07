@@ -19,6 +19,13 @@ import {
   waitUntilReady,
 } from '../lib/launch.mjs';
 import {
+  assertCheckoutConsent,
+  checkoutNeedsTrustConsent,
+  isDefaultAppRemote,
+  isOptInTruthy,
+  resolveAllowInstallScripts,
+} from '../lib/trust.mjs';
+import {
   allPortsFree,
   identifierForClient,
   isAlive,
@@ -189,9 +196,24 @@ export async function cmdUp(args, opts = {}) {
     log(`operator env: ${operatorKeys.join(', ')}`);
   }
 
+  const trustedCheckout =
+    Boolean(args.trustCheckout) || isOptInTruthy(seedConfig.trustCheckout);
+  const allowInstallScripts =
+    Boolean(args.allowInstallScripts) ||
+    resolveAllowInstallScripts(seedConfig.allowInstallScripts);
+
   const refArgs = normalizeLaunchRef(launchArgs);
   launchArgs.pr = refArgs.pr;
   launchArgs.branch = refArgs.branch;
+
+  // Gate before clone/fetch/install/spawn: PR number or non-default remote.
+  if (refArgs.pr != null || !isDefaultAppRemote(seedConfig.appRemote)) {
+    assertCheckoutConsent({
+      ref: refArgs.pr != null ? { kind: 'pr', pr: refArgs.pr } : { kind: 'branch', label: seedConfig.appRemote },
+      remote: seedConfig.appRemote,
+      trusted: trustedCheckout,
+    });
+  }
 
   for (const i of indexes) {
     identifierForClient(i);
@@ -236,12 +258,28 @@ export async function cmdUp(args, opts = {}) {
           `while other clients are running. Stop them first, or match the live checkout.`,
       );
     }
+    assertCheckoutConsent({
+      ref: requested,
+      remote: seedConfig.appRemote,
+      trusted: trustedCheckout,
+    });
     ref = existing.ref;
     worktreePath = existing.worktree;
     log(`reusing live worktree ${worktreePath} @ ${String(ref?.sha ?? '').slice(0, 12)}`);
   } else {
     const appRepo = ensureAppClone(seedConfig.appRemote);
     ref = resolveRef(launchArgs, appRepo, seedConfig.appRemote);
+    assertCheckoutConsent({
+      ref,
+      remote: seedConfig.appRemote,
+      trusted: trustedCheckout,
+    });
+    if (checkoutNeedsTrustConsent(ref, seedConfig.appRemote) && trustedCheckout) {
+      log(
+        'trust-checkout accepted for this PR/foreign-remote run — consent is not a safety ' +
+          'guarantee; install/build/runtime still execute checkout code on this machine',
+      );
+    }
     if (previousSha && previousSha === ref.sha) {
       log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)} (unchanged)`);
     } else if (previousSha) {
@@ -253,7 +291,12 @@ export async function cmdUp(args, opts = {}) {
       log(`checkout ${ref.repo} ${ref.label} @ ${ref.sha.slice(0, 12)}`);
     }
     worktreePath = ensureWorktree(ref, appRepo);
-    pnpmInstall(worktreePath);
+    if (allowInstallScripts) {
+      log('pnpm install: lifecycle scripts enabled (--allow-install-scripts)');
+    } else {
+      log('pnpm install: --ignore-scripts (default); not a build/runtime sandbox');
+    }
+    pnpmInstall(worktreePath, { allowInstallScripts });
   }
 
   ensureCargoTargetsBudget({

@@ -32,6 +32,8 @@ function parseArgs(argv) {
     light: false,
     join: false,
     name: null,
+    trustCheckout: false,
+    allowInstallScripts: false,
   };
   const rest = argv.slice(2);
   if (rest.length === 0) return out;
@@ -100,6 +102,12 @@ function parseArgs(argv) {
         break;
       case '--wipe':
         out.wipe = true;
+        break;
+      case '--trust-checkout':
+        out.trustCheckout = true;
+        break;
+      case '--allow-install-scripts':
+        out.allowInstallScripts = true;
         break;
       case '-h':
       case '--help':

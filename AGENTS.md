@@ -19,6 +19,13 @@ checks out a PR or branch, and drives N `tauri dev` windows over MCP.
 - pacto-app RPC / bundler keys live in this repo's `.env` and are forwarded
   into each `tauri dev` process (`APP_OPERATOR_ENV_KEYS`). Shell env wins
   over the file. Do not write `.env` into pacto-app worktrees.
+- PR (`--pr` ≥ 1) or non-default `PACTO_APP_REMOTE` requires
+  `--trust-checkout` / `PACTO_DEMO_TRUST_CHECKOUT=1` before clone/install/run.
+  Consent is not a safety claim. Default `pnpm install` uses
+  `--ignore-scripts`; opt in with `--allow-install-scripts`. Neither
+  sandboxes tauri build/runtime. See `docs/security/OPERATOR_TRUST_BOUNDARY.md`.
+- Child `pnpm install` / `tauri dev` envs scrub common credential names and
+  `PACTO_DEMO_SEED_*`; deployer `git`/`gh` keep the parent env.
 
 Use a plan-first workflow for isolation, wipe, MCP invoke, seed backup, or
 scenario changes. Do not commit, push, or wipe storage unless the user
