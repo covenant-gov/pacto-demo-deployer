@@ -111,5 +111,7 @@ wipe:
 wipe-all:
 	$(NODE) $(SCRIPT) wipe --all
 
+# Managed targets/<n> plus accidental worktrees/*/src-tauri/target and
+# .cache/pacto-app/src-tauri/target. Does not touch sibling pacto-app clones.
 clean-targets:
 	$(NODE) $(SCRIPT) clean-targets

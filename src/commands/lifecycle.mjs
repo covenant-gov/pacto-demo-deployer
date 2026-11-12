@@ -27,7 +27,9 @@ import { releaseClaimForClient } from '../lib/claims.mjs';
 import {
   dirSizeBytes,
   formatBytes,
+  listAccidentalInTreeTargets,
   listTargetClientDirs,
+  wipeAccidentalInTreeTargets,
   wipeAllTargets,
 } from '../lib/targets.mjs';
 import { cancelDemoBroadcast } from '../scenarios/index.mjs';
@@ -142,20 +144,40 @@ export function cmdStatus() {
   const targetDirs = listTargetClientDirs();
   if (targetDirs.length === 0) {
     log(`  (none under ${TARGETS_DIR})`);
-    return;
+  } else {
+    let total = 0;
+    for (const entry of targetDirs) {
+      const size = dirSizeBytes(entry.path);
+      total += size;
+      log(`  client ${entry.index}: ${formatBytes(size)}  ${entry.path}`);
+    }
+    log(`  total: ${formatBytes(total)}`);
   }
-  let total = 0;
-  for (const entry of targetDirs) {
-    const size = dirSizeBytes(entry.path);
-    total += size;
-    log(`  client ${entry.index}: ${formatBytes(size)}  ${entry.path}`);
+
+  log('accidental in-tree cargo targets:');
+  const accidental = listAccidentalInTreeTargets();
+  if (accidental.length === 0) {
+    log('  (none under worktrees/*/src-tauri/target or .cache/pacto-app/src-tauri/target)');
+  } else {
+    for (const entry of accidental) {
+      log(`  ${entry.label}: ${formatBytes(dirSizeBytes(entry.path))}  ${entry.path}`);
+    }
   }
-  log(`  total: ${formatBytes(total)}`);
+  log(
+    'note: sibling pacto-app clones are outside this repo; reclaim with make clean-cargo / ' +
+      'sweep-cargo (see pacto-app docs/build/CARGO_TARGETS.md).',
+  );
 }
 
 export function cmdCleanTargets() {
   wipeAllTargets();
   log(`cargo targets cleaned under ${TARGETS_DIR}`);
+  const wiped = wipeAccidentalInTreeTargets();
+  if (wiped.length === 0) {
+    log('no accidental in-tree cargo targets under worktrees/ or .cache/pacto-app');
+  } else {
+    log(`accidental in-tree cargo targets cleaned (${wiped.length})`);
+  }
 }
 
 export function cmdWipe(args) {

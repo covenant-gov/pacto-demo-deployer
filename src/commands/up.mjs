@@ -31,7 +31,11 @@ import {
 } from '../lib/process.mjs';
 import { assertClaimFree, claimForClient } from '../lib/claims.mjs';
 import { demoNameForIndex, setupDemoName } from '../lib/session.mjs';
-import { ensureCargoTargetsBudget, pruneOrphanTargetDirs } from '../lib/targets.mjs';
+import {
+  ensureCargoTargetsBudget,
+  pruneOrphanTargetDirs,
+  wipeAccidentalInTreeTargets,
+} from '../lib/targets.mjs';
 import { runScenario } from '../scenarios/index.mjs';
 import { cmdDown, stopTrackedClients } from './lifecycle.mjs';
 
@@ -265,6 +269,9 @@ export async function cmdUp(args, opts = {}) {
   if (!onlyClient) {
     pruneOrphanTargetDirs(indexes[indexes.length - 1]);
   }
+  // Launcher uses CARGO_TARGET_DIR=targets/<n>; any default src-tauri/target under
+  // deployer-owned worktrees/cache is waste from IDE/cargo and should not accumulate.
+  wipeAccidentalInTreeTargets();
 
   const windowTemplate = readWindowTemplate(worktreePath);
   const state = onlyClient
