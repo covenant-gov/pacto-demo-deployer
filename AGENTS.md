@@ -65,7 +65,7 @@ make down
 make down-wipe
 make wipe CLIENT=1
 make status
-make clean-targets   # delete targets/<n> cargo artifacts (not app-data)
+make clean-targets   # delete targets/<n> + accidental worktrees/.cache src-tauri/target (not app-data)
 ```
 
 CLI flags override `.env` (`--pr`, `--branch`, `--clients`, `--client`, `--pin`, `--name`).
@@ -86,8 +86,11 @@ pacto-app `main`.
   number.
 - Cargo `targets/<n>/` is bounded: wipe on pacto-app SHA change, when a client
   dir exceeds 12 GiB, when pruning unused client indexes, or via
-  `clean-targets`. This is separate from app-data `wipe` / `down --wipe`.
-  Never confuse either with `io.pacto`.
+  `clean-targets`. `up` / `reload` / `clean-targets` also wipe accidental
+  `worktrees/*/src-tauri/target` and `.cache/pacto-app/src-tauri/target`
+  (launcher uses `CARGO_TARGET_DIR`). Sibling pacto-app clones are out of
+  scope. This is separate from app-data `wipe` / `down --wipe`. Never confuse
+  either with `io.pacto`.
 - Worktrees under `worktrees/` keep only `main` and the active PR/branch slug;
   switching PR/branch removes prior checkouts.
 - MCP: `ws://127.0.0.1:<mcpBridge>` → `execute_js` → `window.__TAURI__.core.invoke`.

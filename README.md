@@ -127,7 +127,7 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `squad` | Client 1 creates MLS `announcements`, invites client 2 (or `--all`), invitee Accept. Default name `squad-test-<n>` |
 | `squad-join` | Accept a pending invite for the latest creator squad (or `NAME=`). Does not create another squad |
 | `status` / `down` / `wipe` | Inspect, stop (after retracting Commons user and squad broadcasts), or delete `io.pacto.demo.<n>` storage |
-| `clean-targets` | Delete `targets/<n>` Cargo build dirs (not app-data / not `io.pacto`) |
+| `clean-targets` | Delete `targets/<n>` plus accidental `worktrees/*/src-tauri/target` and `.cache/pacto-app/src-tauri/target` (not app-data / not `io.pacto` / not sibling clones) |
 
 ## Isolation
 
@@ -146,13 +146,13 @@ make wipe CLIENT=1
 # rm -rf "$HOME/Library/Application Support/io.pacto.demo.1"
 ```
 
-Cargo build artifacts live under `targets/<n>/` (separate from app-data). Steady state is roughly `clients × ~8–12 GB`. `up` / `reload` wipe those dirs when the pacto-app SHA changes, when a client dir exceeds 12 GiB, or when pruning unused client indexes. Manual reclaim:
+Cargo build artifacts for demo clients live under `targets/<n>/` (separate from app-data). Steady state is roughly `clients × ~8–12 GB`. `up` / `reload` wipe those dirs when the pacto-app SHA changes, when a client dir exceeds 12 GiB, or when pruning unused client indexes. They also wipe accidental default Cargo dirs under deployer-owned trees (`worktrees/*/src-tauri/target`, `.cache/pacto-app/src-tauri/target`) — the launcher sets `CARGO_TARGET_DIR`, so those only appear from IDE/`cargo` opened on a worktree. Manual reclaim:
 
 ```bash
 make clean-targets
 ```
 
-Ordinary `down` does **not** delete `targets/` (same-SHA relaunch stays cached).
+Ordinary `down` does **not** delete `targets/` (same-SHA relaunch stays cached). Sibling pacto-app checkouts outside this repo (each with its own `src-tauri/target`) are not cleaned here — use pacto-app `make clean-cargo` / `make sweep-cargo` (see pacto-app `docs/build/CARGO_TARGETS.md`).
 
 Seeded clients autologin with `PACTO_DEV_LOGIN_MNEMONIC` (PIN `123456` unless `PACTO_DEMO_PIN` / `--pin` / `PIN=`). Re-launching a client reopens its persisted account. After session, the deployer writes the recovery phrase to gitignored `backups/client-<n>.txt` (mode 0600) and does not log it.
 
@@ -165,6 +165,7 @@ CLI stays `pacto-demo.mjs` (Makefile target). Implementation lives under `src/`:
 - `src/scenarios/` — indexed demo paths (`broadcast`, `dm`, `squad`); add a module and one row in [`src/scenarios/index.mjs`](src/scenarios/index.mjs) for a new branch test
 - Planned scenario ids: [`docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md`](docs/plans/2026-08-13-001-feat-demo-scenario-paths-plan.md)
 - Cargo targets plan: [`docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md`](docs/plans/2026-09-02-001-feat-cap-cargo-targets-plan.md)
+- Accidental in-tree cargo targets: [`docs/plans/2026-11-11-001-feat-clean-accidental-cargo-targets-plan.md`](docs/plans/2026-11-11-001-feat-clean-accidental-cargo-targets-plan.md)
 - Logs / up-client: [`docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md`](docs/plans/2026-09-03-001-feat-logs-and-up-client-plan.md)
 - up-simple / reload-client: [`docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md`](docs/plans/2026-09-03-002-feat-up-simple-reload-client-plan.md)
 - Trust boundary: [`docs/plans/2026-11-07-001-feat-trust-boundary-hardening-plan.md`](docs/plans/2026-11-07-001-feat-trust-boundary-hardening-plan.md) and [`docs/security/OPERATOR_TRUST_BOUNDARY.md`](docs/security/OPERATOR_TRUST_BOUNDARY.md)
@@ -176,7 +177,7 @@ Runtime / gitignored:
 - `.env` / `.env.example` — `PR` (`0` = pacto-app `main`) / `CLIENTS` / optional `CLIENT` / `LOG_CLIENT` / numbered seed phrases, optional `PACTO_APP_REMOTE`, and pacto-app operator keys (`ALCHEMY_RPC_KEY`, …)
 - `.cache/pacto-app/` — clone of pacto-app (gitignored)
 - `worktrees/<slug>/` — detached checkout of the chosen PR or branch. Only `main` and the active PR/branch slug are kept; prior PR/branch dirs are removed on `up` / `reload`.
-- `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`). Bounded by SHA-change / 12 GiB cap / orphan prune / `clean-targets`.
+- `targets/<n>/` — per-client `CARGO_TARGET_DIR` (identifiers differ, so binaries cannot share `target/`). Bounded by SHA-change / 12 GiB cap / orphan prune / `clean-targets`. Accidental `src-tauri/target` under `worktrees/` or `.cache/pacto-app` is also reported by `status` and wiped by `clean-targets` / `up` / `reload`.
 - `logs/client-<n>.log` — `tauri dev` output
 - `pids.json` — running client PIDs for `down` / `status` / scenarios
 - `backups/client-<n>.txt` — seed phrases after session (mode 0600; never commit)

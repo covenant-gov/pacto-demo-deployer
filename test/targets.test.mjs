@@ -4,19 +4,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  assertAccidentalInTreeWipePath,
   assertTargetsWipePath,
   dirSizeBytes,
   ensureCargoTargetsBudget,
   formatBytes,
+  listAccidentalInTreeTargets,
   listTargetClientDirs,
   pruneOrphanTargetDirs,
   targetDirForClient,
+  wipeAccidentalInTreeTarget,
+  wipeAccidentalInTreeTargets,
   wipeAllTargets,
   wipeTargetsDir,
 } from '../src/lib/targets.mjs';
 
 function tmpTargetsDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pacto-demo-targets-test-'));
+}
+
+function tmpDeployerTree() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pacto-demo-intree-test-'));
+  const worktreesDir = path.join(root, 'worktrees');
+  const appCacheDir = path.join(root, '.cache', 'pacto-app');
+  fs.mkdirSync(worktreesDir, { recursive: true });
+  fs.mkdirSync(appCacheDir, { recursive: true });
+  return { root, worktreesDir, appCacheDir };
 }
 
 function writeFile(filePath, bytes) {
@@ -153,4 +166,78 @@ test('wipeTargetsDir and dirSizeBytes / formatBytes helpers', () => {
   wipeTargetsDir(dir, root);
   assert.ok(!fs.existsSync(dir));
   assert.strictEqual(dirSizeBytes(dir), 0);
+});
+
+test('listAccidentalInTreeTargets finds worktree and app-cache src-tauri/target', () => {
+  const { worktreesDir, appCacheDir } = tmpDeployerTree();
+  const wtTarget = path.join(worktreesDir, 'main', 'src-tauri', 'target');
+  const cacheTarget = path.join(appCacheDir, 'src-tauri', 'target');
+  writeFile(path.join(wtTarget, 'a.bin'), 8);
+  writeFile(path.join(cacheTarget, 'b.bin'), 8);
+  // Non-matching dirs must be ignored.
+  writeFile(path.join(worktreesDir, 'main', 'other', 'target', 'x.bin'), 8);
+
+  const found = listAccidentalInTreeTargets({ worktreesDir, appCacheDir });
+  assert.deepStrictEqual(
+    found.map(e => e.path).sort(),
+    [cacheTarget, wtTarget].sort(),
+  );
+  assert.ok(found.some(e => e.label === 'worktree main'));
+  assert.ok(found.some(e => e.label === 'app cache'));
+});
+
+test('assertAccidentalInTreeWipePath refuses escape and wrong shape', () => {
+  const { worktreesDir, appCacheDir, root } = tmpDeployerTree();
+  const ok = path.join(worktreesDir, 'feat', 'src-tauri', 'target');
+  fs.mkdirSync(ok, { recursive: true });
+  assert.strictEqual(
+    assertAccidentalInTreeWipePath(ok, { worktreesDir, appCacheDir }),
+    fs.realpathSync(ok),
+  );
+
+  assert.throws(
+    () => assertAccidentalInTreeWipePath(path.join(root, 'outside', 'src-tauri', 'target'), {
+      worktreesDir,
+      appCacheDir,
+    }),
+    /escapes/,
+  );
+  assert.throws(
+    () => assertAccidentalInTreeWipePath(path.join(worktreesDir, 'feat', 'src-tauri'), {
+      worktreesDir,
+      appCacheDir,
+    }),
+    /basename must be 'target'/,
+  );
+  const nested = path.join(worktreesDir, 'feat', 'src-tauri', 'target', 'debug');
+  fs.mkdirSync(nested, { recursive: true });
+  assert.throws(
+    () => assertAccidentalInTreeWipePath(nested, { worktreesDir, appCacheDir }),
+    /basename must be 'target'|parent must be 'src-tauri'|not worktrees/,
+  );
+});
+
+test('wipeAccidentalInTreeTargets removes listed dirs only', () => {
+  const { worktreesDir, appCacheDir } = tmpDeployerTree();
+  const wtTarget = path.join(worktreesDir, 'main', 'src-tauri', 'target');
+  const keep = path.join(worktreesDir, 'main', 'src-tauri', 'src');
+  writeFile(path.join(wtTarget, 'a.bin'), 16);
+  writeFile(path.join(keep, 'lib.rs'), 4);
+
+  const wiped = wipeAccidentalInTreeTargets({ worktreesDir, appCacheDir });
+  assert.deepStrictEqual(wiped, [wtTarget]);
+  assert.ok(!fs.existsSync(wtTarget));
+  assert.ok(fs.existsSync(path.join(keep, 'lib.rs')));
+});
+
+test('wipeAccidentalInTreeTarget refuses paths outside deployer roots', () => {
+  const { worktreesDir, appCacheDir } = tmpDeployerTree();
+  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'pacto-demo-foreign-'));
+  const foreignTarget = path.join(foreign, 'src-tauri', 'target');
+  fs.mkdirSync(foreignTarget, { recursive: true });
+  assert.throws(
+    () => wipeAccidentalInTreeTarget(foreignTarget, { worktreesDir, appCacheDir }),
+    /escapes/,
+  );
+  assert.ok(fs.existsSync(foreignTarget));
 });

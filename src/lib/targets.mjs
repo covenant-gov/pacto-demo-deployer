@@ -1,9 +1,121 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { MAX_TARGET_DIR_BYTES, TARGETS_DIR } from './config.mjs';
+import {
+  APP_CACHE,
+  MAX_TARGET_DIR_BYTES,
+  TARGETS_DIR,
+  WORKTREES_DIR,
+} from './config.mjs';
 import { log } from './process.mjs';
 
 const CLIENT_DIR_RE = /^[1-9][0-9]*$/;
+
+function resolveExistingRoot(root) {
+  const resolved = path.resolve(root);
+  return fs.existsSync(resolved) ? fs.realpathSync(resolved) : resolved;
+}
+
+function isUnderRoot(resolved, resolvedRoot) {
+  return resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep);
+}
+
+/**
+ * Accidental default Cargo dirs under deployer-owned trees.
+ * Launcher sets CARGO_TARGET_DIR to targets/<n>, so any
+ * worktrees/<slug>/src-tauri/target or .cache/pacto-app/src-tauri/target
+ * is leftover from IDE/cargo in those trees.
+ */
+export function listAccidentalInTreeTargets({
+  worktreesDir = WORKTREES_DIR,
+  appCacheDir = APP_CACHE,
+} = {}) {
+  const found = [];
+  const worktreesRoot = path.resolve(worktreesDir);
+  if (fs.existsSync(worktreesRoot)) {
+    for (const entry of fs.readdirSync(worktreesRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const candidate = path.join(worktreesRoot, entry.name, 'src-tauri', 'target');
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        found.push({
+          path: candidate,
+          label: `worktree ${entry.name}`,
+        });
+      }
+    }
+  }
+  const cacheTarget = path.join(path.resolve(appCacheDir), 'src-tauri', 'target');
+  if (fs.existsSync(cacheTarget) && fs.statSync(cacheTarget).isDirectory()) {
+    found.push({
+      path: cacheTarget,
+      label: 'app cache',
+    });
+  }
+  return found;
+}
+
+export function assertAccidentalInTreeWipePath(
+  dir,
+  { worktreesDir = WORKTREES_DIR, appCacheDir = APP_CACHE } = {},
+) {
+  const resolved = fs.existsSync(dir) ? fs.realpathSync(dir) : path.resolve(dir);
+  if (path.basename(resolved) !== 'target') {
+    throw new Error(`refusing to wipe '${dir}': basename must be 'target'`);
+  }
+  if (path.basename(path.dirname(resolved)) !== 'src-tauri') {
+    throw new Error(`refusing to wipe '${dir}': parent must be 'src-tauri'`);
+  }
+
+  const worktreesRoot = resolveExistingRoot(worktreesDir);
+  const appCacheRoot = resolveExistingRoot(appCacheDir);
+  const underWorktrees = isUnderRoot(resolved, worktreesRoot);
+  const underCache = isUnderRoot(resolved, appCacheRoot);
+  if (!underWorktrees && !underCache) {
+    throw new Error(
+      `refusing to wipe '${dir}': path escapes ${worktreesRoot} and ${appCacheRoot}`,
+    );
+  }
+  if (underWorktrees) {
+    // Expect worktrees/<slug>/src-tauri/target — three segments under worktrees root.
+    const rel = path.relative(worktreesRoot, resolved);
+    const parts = rel.split(path.sep);
+    if (parts.length !== 3 || parts[1] !== 'src-tauri' || parts[2] !== 'target') {
+      throw new Error(`refusing to wipe '${dir}': not worktrees/<slug>/src-tauri/target`);
+    }
+  }
+  if (underCache && !underWorktrees) {
+    const rel = path.relative(appCacheRoot, resolved);
+    const parts = rel.split(path.sep);
+    if (parts.length !== 2 || parts[0] !== 'src-tauri' || parts[1] !== 'target') {
+      throw new Error(`refusing to wipe '${dir}': not .cache/pacto-app/src-tauri/target`);
+    }
+  }
+  return resolved;
+}
+
+export function wipeAccidentalInTreeTarget(
+  dir,
+  { worktreesDir = WORKTREES_DIR, appCacheDir = APP_CACHE } = {},
+) {
+  const resolved = assertAccidentalInTreeWipePath(dir, { worktreesDir, appCacheDir });
+  if (!fs.existsSync(resolved)) {
+    log(`already absent: ${resolved}`);
+    return;
+  }
+  const size = dirSizeBytes(resolved);
+  fs.rmSync(resolved, { recursive: true, force: true });
+  log(`wiped accidental in-tree cargo target ${resolved} (${formatBytes(size)})`);
+}
+
+export function wipeAccidentalInTreeTargets({
+  worktreesDir = WORKTREES_DIR,
+  appCacheDir = APP_CACHE,
+} = {}) {
+  const entries = listAccidentalInTreeTargets({ worktreesDir, appCacheDir });
+  for (const entry of entries) {
+    wipeAccidentalInTreeTarget(entry.path, { worktreesDir, appCacheDir });
+  }
+  return entries.map(e => e.path);
+}
 
 export function targetDirForClient(index, targetsDir = TARGETS_DIR) {
   const n = Number(index);

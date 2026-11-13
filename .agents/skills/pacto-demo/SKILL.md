@@ -13,7 +13,10 @@ license: MIT
 - Do not set `PACTO_TEST_SANDBOX_ROOT` or `PACTO_DEV_WORLD`.
 - Wipe only `io.pacto.demo.<n>` directories under the OS app-data root.
 - Cargo `targets/<n>/` is separate: SHA-change / 12 GiB cap / orphan prune /
-  `clean-targets`. Do not confuse with app-data wipe or `io.pacto`.
+  `clean-targets`. Also wipe accidental `worktrees/*/src-tauri/target` and
+  `.cache/pacto-app/src-tauri/target`. Sibling pacto-app clones are out of
+  scope (`make clean-cargo` there). Do not confuse with app-data wipe or
+  `io.pacto`.
 - `worktrees/` keeps only `main` and the active PR/branch slug.
 
 ## Secrets

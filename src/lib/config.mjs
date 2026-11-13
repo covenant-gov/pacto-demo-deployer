@@ -304,7 +304,7 @@ Usage:
   node pacto-demo.mjs status
   node pacto-demo.mjs wipe --client <n>
   node pacto-demo.mjs wipe --all
-  node pacto-demo.mjs clean-targets   # delete targets/<n> cargo artifacts (not app-data)
+  node pacto-demo.mjs clean-targets   # delete targets/<n> + accidental worktrees/.cache src-tauri/target (not app-data)
 
 Options:
   --pr <n>              GitHub PR number on covenant-gov/pacto-app; 0 = main (mutually exclusive with --branch)
@@ -329,7 +329,10 @@ Defaults (CLI overrides .env):
 
 Notes:
   up/reload wipe cargo targets/<n> when the pacto-app SHA changes, when a client
-  dir exceeds 12 GiB, or when pruning unused client indexes. App-data wipe is separate.
+  dir exceeds 12 GiB, or when pruning unused client indexes. They also wipe
+  accidental worktrees/*/src-tauri/target and .cache/pacto-app/src-tauri/target
+  (launcher uses CARGO_TARGET_DIR). App-data wipe is separate. Sibling pacto-app
+  clones are outside this repo — use pacto-app make clean-cargo / sweep-cargo.
   up/reload also prune worktrees/ to only main + the active PR/branch slug.
   PR / foreign-remote checkouts need --trust-checkout (consent ≠ safety). Default
   pnpm install uses --ignore-scripts; that does not sandbox tauri build/runtime.
