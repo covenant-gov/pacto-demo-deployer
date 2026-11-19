@@ -140,6 +140,7 @@ async function main() {
       case 'up-full':
       case 'up-light':
       case 'up-simple':
+      case 'init':
       case 'up-client':
       case 'up-simple-client':
       case 'reload':
@@ -148,11 +149,13 @@ async function main() {
         await cmdUp(args, {
           full: args.command === 'up-full' || args.full,
           light: args.command === 'up-light' || args.light,
+          init: args.command === 'init',
           onlyClient:
             args.command === 'up-client' ||
             args.command === 'up-simple-client' ||
             args.command === 'reload-client',
           simple:
+            args.command === 'init' ||
             args.command === 'up-simple' ||
             args.command === 'up-simple-client' ||
             args.command === 'reload-simple',

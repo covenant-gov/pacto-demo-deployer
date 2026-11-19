@@ -58,7 +58,9 @@ export function resolveUpMode(args = {}, opts = {}) {
     command === 'up-client' ||
     command === 'up-simple-client' ||
     command === 'reload-client';
+  const init = Boolean(opts.init) || command === 'init';
   const simple =
+    init ||
     Boolean(opts.simple) ||
     command === 'up-simple' ||
     command === 'up-simple-client' ||
@@ -74,7 +76,8 @@ export function resolveUpMode(args = {}, opts = {}) {
     command === 'up-light';
   const doSession = !simple;
   const doBroadcast = !simple && (full || light);
-  return { onlyClient, simple, full, light, doSession, doBroadcast };
+  const bareAuth = init;
+  return { onlyClient, simple, full, light, doSession, doBroadcast, init, bareAuth };
 }
 
 async function spawnOneClient({
@@ -85,10 +88,11 @@ async function spawnOneClient({
   pin,
   state,
   doSession = true,
+  bareAuth = false,
 }) {
   const identifier = identifierForClient(index);
   const ports = portsForIndex(index);
-  const mnemonic = seedConfig.byIndex.get(index) ?? null;
+  const mnemonic = bareAuth ? null : seedConfig.byIndex.get(index) ?? null;
   const overlay = tauriOverlay(index, ports, windowTemplate);
   if (overlay.identifier !== identifier) {
     throw new Error('internal error: overlay identifier mismatch');
@@ -107,7 +111,8 @@ async function spawnOneClient({
   }
 
   const logPath = clientLogPath(index);
-  const env = launchEnv(index, ports, mnemonic, pin, seedConfig.operatorEnv ?? {});
+  const launchPin = bareAuth ? null : pin;
+  const env = launchEnv(index, ports, mnemonic, launchPin, seedConfig.operatorEnv ?? {});
   if (env.PACTO_TEST_SANDBOX_ROOT || env.PACTO_DEV_WORLD) {
     throw new Error('internal error: sandbox env leaked into launch');
   }
@@ -122,9 +127,9 @@ async function spawnOneClient({
     pid,
     ports,
     log: logPath,
-    seeded: Boolean(mnemonic),
+    seeded: bareAuth ? false : Boolean(mnemonic),
     storage: storageDirForClient(index),
-    name: demoNameForIndex(index),
+    name: bareAuth ? null : demoNameForIndex(index),
     npub: null,
     broadcast: false,
   };
@@ -147,7 +152,10 @@ async function spawnOneClient({
 }
 
 export async function cmdUp(args, opts = {}) {
-  const { onlyClient, simple, full, light, doSession, doBroadcast } = resolveUpMode(args, opts);
+  const { onlyClient, simple, full, light, doSession, doBroadcast, bareAuth } = resolveUpMode(
+    args,
+    opts,
+  );
   const seedConfig = loadSeedConfig(args);
   const pin = seedConfig.pin;
   const launchArgs = {
@@ -178,10 +186,12 @@ export async function cmdUp(args, opts = {}) {
         ? `mode: up-client (login, broadcast) client ${indexes[0]}`
         : onlyClient
           ? `mode: reload-client (login) client ${indexes[0]}`
-          : simple
-            ? args.command === 'reload-simple'
-              ? 'mode: reload-simple (spawn only)'
-              : 'mode: up-simple (spawn only)'
+          : args.command === 'init'
+            ? 'mode: init (spawn only, no auth env)'
+            : simple
+              ? args.command === 'reload-simple'
+                ? 'mode: reload-simple (spawn only)'
+                : 'mode: up-simple (spawn only)'
             : full
               ? 'mode: up-full (login, broadcast, DMs, squad)'
               : light
@@ -190,7 +200,9 @@ export async function cmdUp(args, opts = {}) {
                   ? 'mode: reload (login)'
                   : 'mode: up (login)',
   );
-  if (seedConfig.loaded) {
+  if (bareAuth) {
+    log('init: omitting mnemonic and PIN from child env');
+  } else if (seedConfig.loaded) {
     log(`seeds: ${seedConfig.envPath} (${seedConfig.byIndex.size} phrase(s))`);
   } else {
     log(`seeds: no .env at ${seedConfig.envPath} (copy .env.example to .env); extra clients stay fresh`);
@@ -342,6 +354,7 @@ export async function cmdUp(args, opts = {}) {
         pin,
         state,
         doSession,
+        bareAuth,
       }),
     );
   }

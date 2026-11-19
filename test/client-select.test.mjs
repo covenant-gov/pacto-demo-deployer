@@ -131,21 +131,35 @@ test('cmdLogs follows logs/client-<n>.log via tail -F', async () => {
 });
 
 test('resolveUpMode maps simple and reload-client correctly', () => {
+  const spawnOnly = {
+    doSession: false,
+    doBroadcast: false,
+    init: false,
+    bareAuth: false,
+  };
   assert.deepEqual(resolveUpMode({ command: 'up-simple' }), {
     onlyClient: false,
     simple: true,
     full: false,
     light: false,
-    doSession: false,
-    doBroadcast: false,
+    ...spawnOnly,
   });
   assert.deepEqual(resolveUpMode({ command: 'up-simple-client' }), {
     onlyClient: true,
     simple: true,
     full: false,
     light: false,
+    ...spawnOnly,
+  });
+  assert.deepEqual(resolveUpMode({ command: 'init' }), {
+    onlyClient: false,
+    simple: true,
+    full: false,
+    light: false,
     doSession: false,
     doBroadcast: false,
+    init: true,
+    bareAuth: true,
   });
   assert.deepEqual(resolveUpMode({ command: 'reload-client' }), {
     onlyClient: true,
@@ -154,6 +168,8 @@ test('resolveUpMode maps simple and reload-client correctly', () => {
     light: false,
     doSession: true,
     doBroadcast: false,
+    init: false,
+    bareAuth: false,
   });
   assert.deepEqual(resolveUpMode({ command: 'up-client' }), {
     onlyClient: true,
@@ -162,6 +178,8 @@ test('resolveUpMode maps simple and reload-client correctly', () => {
     light: true,
     doSession: true,
     doBroadcast: true,
+    init: false,
+    bareAuth: false,
   });
   assert.deepEqual(resolveUpMode({ command: 'reload' }), {
     onlyClient: false,
@@ -170,13 +188,14 @@ test('resolveUpMode maps simple and reload-client correctly', () => {
     light: false,
     doSession: true,
     doBroadcast: false,
+    init: false,
+    bareAuth: false,
   });
   assert.deepEqual(resolveUpMode({ command: 'reload-simple' }), {
     onlyClient: false,
     simple: true,
     full: false,
     light: false,
-    doSession: false,
-    doBroadcast: false,
+    ...spawnOnly,
   });
 });

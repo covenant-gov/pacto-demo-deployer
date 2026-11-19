@@ -50,6 +50,7 @@ make up              # launch, login/create, backup seed, profile
 make up-light        # up + Commons user broadcast
 make up-full         # up-light + DMs + squad (client 1 invites client 2; invitee accepts)
 make up-simple       # spawn clients only (no MCP session / scenarios)
+make init            # spawn only; no mnemonic/PIN in child env (no MCP login/PIN/name)
 make up-client       # up-light for CLIENT / --client only (other clients untouched)
 make up-simple-client # spawn only for CLIENT / --client
 make logs            # follow logs/client-<n>.log (LOG_CLIENT / --client)

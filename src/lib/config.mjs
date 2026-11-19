@@ -296,6 +296,7 @@ Usage:
   node pacto-demo.mjs reload-simple # same as reload, spawn only (no MCP session)
   node pacto-demo.mjs reload-client # same as reload for one CLIENT / --client
   node pacto-demo.mjs up-simple # spawn clients only (no MCP session / scenarios)
+  node pacto-demo.mjs init      # spawn only; no mnemonic/PIN in child env (no MCP)
   node pacto-demo.mjs up-client # up-light for one CLIENT / --client (other clients untouched)
   node pacto-demo.mjs up-simple-client # spawn only for one CLIENT / --client
   node pacto-demo.mjs logs      # follow logs/client-<n>.log (LOG_CLIENT / --client)
@@ -351,6 +352,7 @@ Makefile:
   make reload-simple        # reload worktree, spawn only (no MCP session)
   make reload-client        # CLIENT= in .env or make reload-client CLIENT=2
   make up-simple
+  make init                 # spawn only; PIN/NAME ignored (no mnemonic/PIN in child env)
   make up-client            # CLIENT= in .env or make up-client CLIENT=2
   make up-simple-client     # CLIENT= in .env or make up-simple-client CLIENT=2
   make logs                 # LOG_CLIENT= in .env or make logs LOG_CLIENT=2

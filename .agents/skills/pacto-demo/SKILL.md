@@ -49,6 +49,7 @@ license: MIT
 - Client 1 `alpha-test`, client 2 `bravo-test` (`demoNameForIndex`).
 - `make up` = launch + session. `make up-light` = `up` + Commons user broadcast.
   `make up-simple` = spawn only (seed/PIN env still forwarded; no MCP session/scenarios).
+  `make init` = spawn only; never pass mnemonic/PIN into child env (no MCP login/PIN/name).
   `make up-client` = up-light for `CLIENT` / `--client` only (`PACTO_DEMO_SEED_N`);
   does not stop or spawn other indexes. `make up-simple-client` = spawn-only single client.
   `make reload-simple` = same worktree update as `reload`, spawn only (no MCP session).

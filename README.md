@@ -26,6 +26,7 @@ make up                 # login, backup seed, profile
 make up-light           # up, then Commons user broadcast
 make up-full            # up-light, then DMs + squad
 make up-simple          # spawn only (no MCP session / scenarios)
+make init               # spawn only; no mnemonic/PIN in child env (no MCP login/PIN/name)
 make reload             # fetch latest PR/branch commits and rebuild (storage kept)
 make reload-simple      # reload worktree, spawn only (no MCP session)
 make reload-client CLIENT=2  # reload one client only (siblings untouched)
@@ -107,6 +108,8 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 
 `up-simple` / `up-simple-client` spawn windows and wait until ready, still forwarding seeds/PIN/operator env, but skip deployer MCP (no `setupDemoName`, broadcast, dm, or squad).
 
+`init` uses the same clone/install/spawn path as `up-simple` but never puts mnemonic or PIN into the child env (operator keys still forwarded). No deployer MCP; persisted app-data may show welcome or PIN UI and the deployer does not unlock it.
+
 `up-client` starts only `io.pacto.demo.<n>` (`PACTO_DEMO_SEED_N`). It does not stop sibling clients, does not create other indexes' app-data, and does not prune `targets/<m>` for other clients. If other demo clients are already running, it reuses their pacto-app worktree and refuses a SHA switch.
 
 ## Commands
@@ -117,6 +120,7 @@ pacto-app debug secrets (`ALCHEMY_RPC_KEY`, `POCKET_RPC_KEY`, `PIMLICO_API_KEY`,
 | `up-light` | `up`, then Commons user broadcast |
 | `up-full` | `up-light`, then `dm`, then `squad` |
 | `up-simple` | Spawn clients only (seed/PIN env still set; no MCP session / scenarios) |
+| `init` | Spawn clients only; no mnemonic/PIN in child env (no MCP login/PIN/name) |
 | `up-client` | `up-light` for one index (`CLIENT` / `--client`, seed `PACTO_DEMO_SEED_N`). Leaves other clients and their storage alone |
 | `up-simple-client` | Spawn-only single index (`CLIENT` / `--client`) |
 | `logs` | Follow `logs/client-<n>.log` (`LOG_CLIENT` / `--client`) |
